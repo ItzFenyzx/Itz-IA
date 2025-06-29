@@ -1,16 +1,13 @@
 // ==================================================================
-//  Backend para Itzbot v6 (Vercel Serverless Function)
+//  Backend para Chatbot v7 (Vercel Serverless Function)
 //  Arquivo: /api/gemini.js
 //
-//  Implementa a arquitetura final com:
-//  - Persona Dinâmica.
-//  - RAG com orçamento de contexto.
-//  - Lógica para Memória Automática (opcional).
+//  Implementa a verificação de senha segura para o Modo Pro.
 // ==================================================================
 
-const CONTEXT_BUDGET_CHARS = 4000; // Orçamento máximo de caracteres para o contexto
+const CONTEXT_BUDGET_CHARS = 4000;
 
-// Função auxiliar para fazer chamadas à API do Gemini
+// Função auxiliar para chamar a API do Gemini
 async function callGemini(prompt, apiKey, model) {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const payload = {
@@ -22,32 +19,16 @@ async function callGemini(prompt, apiKey, model) {
         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
     ]
   };
-
-  const geminiResponse = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
+  const geminiResponse = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if (!geminiResponse.ok) {
     const errorText = await geminiResponse.text();
     console.error(`Erro na API do Gemini com o modelo ${model}: ${errorText}`);
-    if(geminiResponse.status === 429) {
-        throw new Error('Limite de requisições da API atingido. Tente novamente em um minuto.');
-    }
+    if(geminiResponse.status === 429) { throw new Error('Limite de requisições da API atingido. Tente novamente em um minuto.'); }
     throw new Error(`Erro na API do Gemini.`);
   }
-
   const data = await geminiResponse.json();
-  if (data.candidates && data.candidates[0]?.content.parts[0]?.text) {
-    return data.candidates[0].content.parts[0].text;
-  }
-  // Se não houver candidato, mas a resposta for válida (ex: bloqueio de segurança), retorne uma string vazia
-  if (data.promptFeedback?.blockReason) {
-      console.warn("Resposta bloqueada por segurança:", data.promptFeedback.blockReason);
-      return `(Minha resposta foi bloqueada por segurança: ${data.promptFeedback.blockReason})`;
-  }
-
+  if (data.candidates && data.candidates[0]?.content.parts[0]?.text) { return data.candidates[0].content.parts[0].text; }
+  if (data.promptFeedback?.blockReason) { console.warn("Resposta bloqueada por segurança:", data.promptFeedback.blockReason); return `(Minha resposta foi bloqueada por segurança: ${data.promptFeedback.blockReason})`; }
   throw new Error("Resposta da API inválida ou vazia.");
 }
 
@@ -57,7 +38,8 @@ export default async function handler(request, response) {
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { prompt: userQuery, isPro, isAutoMemory, memories } = request.body;
+  // Recebe 'prompt', 'isPro', 'proToken', 'isAutoMemory', e 'memories' do frontend.
+  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories } = request.body;
 
   if (!userQuery) {
     return response.status(400).json({ error: 'Nenhum prompt foi fornecido.' });
@@ -68,35 +50,53 @@ export default async function handler(request, response) {
     return response.status(500).json({ error: 'Chave de API não configurada no servidor.' });
   }
 
+  // --- VERIFICAÇÃO DE SENHA DO MODO PRO ---
+  let modelForFinalAnswer;
   const fastModel = 'gemini-1.5-flash-latest';
   const proModel = 'gemini-1.5-pro-latest';
-  const modelForFinalAnswer = isPro ? proModel : fastModel;
+  
+  if (isPro) {
+    // Se o usuário quer usar o Modo Pro, verificamos a senha.
+    // A senha correta está segura nas variáveis de ambiente da Vercel.
+    const correctPassword = process.env.PRO_MODE_PASSWORD;
+    if (!correctPassword) {
+        return response.status(500).json({ error: 'Senha do Modo Pro não foi configurada no servidor.' });
+    }
+    if (proToken !== correctPassword) {
+      // Se a senha enviada pelo frontend não bate com a senha do servidor, retorna erro 401 Unauthorized.
+      return response.status(401).json({ error: 'Senha do Modo Pro incorreta.' });
+    }
+    // Se a senha estiver correta, define o modelo como Pro.
+    modelForFinalAnswer = proModel;
+  } else {
+    // Se não for modo pro, usa o modelo Flash.
+    modelForFinalAnswer = fastModel;
+  }
 
   try {
     // --- LÓGICA DE CONTEXTO (RAG) ---
     let contextPrompt = "";
     let usedContextTopics = [];
-    if (memories.length > 0) {
+    if (memories && memories.length > 0) {
         const allTopics = [...new Set(memories.flatMap(m => m.topics))];
-        const topicRankPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-        const rankedTopicsResponse = await callGemini(topicRankPrompt, apiKey, fastModel);
-        const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
-        
-        if (rankedTopics.length > 0) {
-            usedContextTopics = rankedTopics;
-            let contextMemories = []; let currentChars = 0;
-            for (const topic of rankedTopics) {
-                const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
-                for (const memory of memoriesInTopic) {
-                    if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) {
-                        contextMemories.push(memory.text); currentChars += memory.text.length;
-                    } else { break; }
+        if (allTopics.length > 0) {
+            const topicRankPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
+            const rankedTopicsResponse = await callGemini(topicRankPrompt, apiKey, fastModel);
+            const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
+            if (rankedTopics.length > 0) {
+                usedContextTopics = rankedTopics;
+                let contextMemories = []; let currentChars = 0;
+                for (const topic of rankedTopics) {
+                    const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
+                    for (const memory of memoriesInTopic) {
+                        if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { contextMemories.push(memory.text); currentChars += memory.text.length; } else { break; }
+                    }
+                    if (currentChars >= CONTEXT_BUDGET_CHARS) break;
                 }
-                if (currentChars >= CONTEXT_BUDGET_CHARS) break;
-            }
-            if (contextMemories.length > 0) {
-                const contextText = contextMemories.join("\n- ");
-                contextPrompt = `Use o seguinte contexto da base de memória:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
+                if (contextMemories.length > 0) {
+                    const contextText = contextMemories.join("\n- ");
+                    contextPrompt = `Use o seguinte contexto da base de memória:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
+                }
             }
         }
     }
@@ -117,17 +117,15 @@ export default async function handler(request, response) {
         try {
             const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery}"\n\nRESPOSTA: "${finalAiResponse}"`;
             const autoMemoryResponse = await callGemini(autoMemoryPrompt, apiKey, fastModel);
-            const parsedMemory = JSON.parse(autoMemoryResponse);
-            if (parsedMemory.text && parsedMemory.topics) {
-                newMemory = {
-                    id: `mem-${Date.now()}`,
-                    text: parsedMemory.text,
-                    topics: parsedMemory.topics
-                };
+            // Adiciona uma verificação para garantir que a resposta é um JSON válido
+            if(autoMemoryResponse.trim().startsWith('{')) {
+                const parsedMemory = JSON.parse(autoMemoryResponse);
+                if (parsedMemory.text && parsedMemory.topics) {
+                    newMemory = { id: `mem-${Date.now()}`, text: parsedMemory.text, topics: parsedMemory.topics };
+                }
             }
         } catch (e) {
             console.error("Erro no processo de memória automática:", e);
-            // Falha silenciosa, o chat continua funcionando.
         }
     }
     
