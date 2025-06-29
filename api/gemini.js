@@ -1,14 +1,58 @@
 const CONTEXT_BUDGET_CHARS = 3500;
-const CREATION_DATE = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
 const BASE_MEMORY_CONTEXT = `
 Você é o "Phoenix Chat", uma IA de conversação avançada.
 - Seu criador é Arthur Nascimento Nogueira.
-- Você foi criado em ${CREATION_DATE}.
+- Você foi criado em 2025.
 - Você é baseado na tecnologia Gemini do Google.
 - O seu nome pode ser alterado pelo utilizador se ele desejar.
-- Responda sempre de forma útil, completa e seguindo a persona de especialista solicitada.
+
+Responda sempre de forma útil, completa e direta. NÃO mencione informações sobre sua criação ou identidade a menos que seja especificamente perguntado sobre isso.
 `;
+
+const PROFESSIONAL_AREAS = {
+    'programação': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
+    'código': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
+    'script': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
+    'medicina': 'Médico especialista',
+    'saúde': 'Profissional de Saúde',
+    'direito': 'Advogado especialista',
+    'educação': 'Educador especializado',
+    'ensino': 'Educador especializado',
+    'negócios': 'Consultor de Negócios',
+    'marketing': 'Especialista em Marketing',
+    'design': 'Designer Profissional',
+    'arte': 'Artista e Designer',
+    'música': 'Músico e Produtor Musical',
+    'culinária': 'Chef Profissional',
+    'fitness': 'Personal Trainer e Nutricionista',
+    'psicologia': 'Psicólogo',
+    'engenharia': 'Engenheiro especialista',
+    'ciência': 'Cientista pesquisador',
+    'matemática': 'Matemático especialista',
+    'física': 'Físico especialista',
+    'química': 'Químico especialista',
+    'história': 'Historiador especialista',
+    'geografia': 'Geógrafo especialista',
+    'literatura': 'Crítico Literário e Escritor',
+    'escrita': 'Escritor Profissional',
+    'jornalismo': 'Jornalista especializado',
+    'fotografia': 'Fotógrafo Profissional',
+    'cinema': 'Crítico de Cinema e Cineasta',
+    'games': 'Especialista em Jogos e Game Designer',
+    'tecnologia': 'Especialista em Tecnologia',
+    'minecraft': 'Especialista em Minecraft e Desenvolvimento de Mods'
+};
+
+function detectProfessionalArea(query) {
+    const lowerQuery = query.toLowerCase();
+    for (const [keyword, profession] of Object.entries(PROFESSIONAL_AREAS)) {
+        if (lowerQuery.includes(keyword)) {
+            return profession;
+        }
+    }
+    return null;
+}
 
 async function callGemini(parts, apiKey, model) {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -82,7 +126,17 @@ export default async function handler(request, response) {
 }
 
 async function handleChatRequest(body) {
-  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories, image, useDynamicPersona } = body;
+  const { 
+    prompt: userQuery, 
+    isPro, 
+    proToken, 
+    autoMemoryGlobal, 
+    autoMemoryChat, 
+    globalMemories, 
+    chatMemories, 
+    image, 
+    useDynamicPersona 
+  } = body;
 
   if (!userQuery && !image) {
     throw { statusCode: 400, message: 'Nenhum prompt ou imagem foi fornecido.' };
@@ -119,52 +173,61 @@ async function handleChatRequest(body) {
       });
   }
 
-  // RAG - Contexto de memória
+  // RAG - Contexto de memória (Global + Chat)
   let contextPrompt = "";
   let usedContextTopics = [];
-  if (memories && memories.length > 0) {
-      const allTopics = [...new Set(memories.flatMap(m => m.topics))].filter(Boolean);
+  const allMemories = [...(globalMemories || []), ...(chatMemories || [])];
+  
+  if (allMemories && allMemories.length > 0) {
+      const allTopics = [...new Set(allMemories.flatMap(m => m.topics))].filter(Boolean);
       if (allTopics.length > 0) {
           const topicRankPrompt = `Analise a pergunta do usuário e identifique quais dos seguintes tópicos são mais relevantes. Responda APENAS com os nomes dos tópicos, EM ORDEM DO MAIS PARA O MENOS RELEVANTE, separados por vírgula.\nTópicos disponíveis: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-          const rankedTopicsResponse = await callGemini([{text: topicRankPrompt}], apiKey, fastModel);
-          const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
           
-          if (rankedTopics.length > 0) {
-              usedContextTopics = rankedTopics;
-              let contextMemories = []; 
-              let currentChars = 0;
-              for (const topic of rankedTopics) {
-                  const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
-                  for (const memory of memoriesInTopic) {
-                      if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { 
-                          contextMemories.push(memory.text); 
-                          currentChars += memory.text.length; 
-                      } else { break; }
+          try {
+              const rankedTopicsResponse = await callGemini([{text: topicRankPrompt}], apiKey, fastModel);
+              const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
+              
+              if (rankedTopics.length > 0) {
+                  usedContextTopics = rankedTopics;
+                  let contextMemories = []; 
+                  let currentChars = 0;
+                  for (const topic of rankedTopics) {
+                      const memoriesInTopic = allMemories.filter(mem => mem.topics.includes(topic));
+                      for (const memory of memoriesInTopic) {
+                          if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { 
+                              contextMemories.push(memory.text); 
+                              currentChars += memory.text.length; 
+                          } else { break; }
+                      }
+                      if (currentChars >= CONTEXT_BUDGET_CHARS) break;
                   }
-                  if (currentChars >= CONTEXT_BUDGET_CHARS) break;
+                  if (contextMemories.length > 0) {
+                      const contextText = contextMemories.join("\n- ");
+                      contextPrompt = `Use o seguinte contexto da base de memória se for relevante, mas não se limite a ele:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
+                  }
               }
-              if (contextMemories.length > 0) {
-                  const contextText = contextMemories.join("\n- ");
-                  contextPrompt = `Use o seguinte contexto da base de memória se for relevante, mas não se limite a ele:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
-              }
+          } catch (e) {
+              console.error("Erro ao processar contexto de memória:", e);
           }
       }
   }
 
   // Persona dinâmica (apenas se ativada)
   let persona = "";
-  if (useDynamicPersona) {
-      const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery || 'Analisar a imagem fornecida'}"`;
-      persona = await callGemini([{text: personaDefinitionPrompt}], apiKey, fastModel);
+  if (useDynamicPersona && userQuery) {
+      const detectedArea = detectProfessionalArea(userQuery);
+      if (detectedArea) {
+          persona = detectedArea;
+      }
   }
 
   // Prompt final
   let finalSystemPrompt = BASE_MEMORY_CONTEXT;
   if (useDynamicPersona && persona.trim()) {
-      finalSystemPrompt += `\nAssuma a persona de um(a) **${persona.trim()}**.`;
+      finalSystemPrompt += `\nPara esta resposta, atue como um(a) **${persona.trim()}**. Responda de forma profissional e especializada, mas sem se apresentar ou mencionar sua persona.`;
   }
   finalSystemPrompt += `\n${contextPrompt}`;
-  finalSystemPrompt += `\nResponda à pergunta do usuário de forma completa, profunda e com o estilo apropriado${useDynamicPersona ? ' para essa persona' : ''}, usando Markdown para formatação (títulos, listas, etc.).`;
+  finalSystemPrompt += `\nResponda à pergunta do usuário de forma completa, focada e direta, usando Markdown para formatação quando apropriado. Seja conciso e vá direto ao ponto solicitado.`;
   if (contextPrompt) {
       finalSystemPrompt += `\nSe o contexto da memória não for relevante para a pergunta, ignore-o e responda de forma natural com base no seu conhecimento geral.`;
   }
@@ -176,16 +239,16 @@ async function handleChatRequest(body) {
 
   // Verificar se precisa gerar conteúdo para o Canvas
   let canvasContent = "";
-  const canvasKeywords = ['script', 'código', 'arquivo', 'documento', 'exemplo', 'template', 'estrutura', 'esquema', 'diagrama', 'lista', 'tabela'];
+  const canvasKeywords = ['script', 'código', 'arquivo', 'documento', 'exemplo', 'template', 'estrutura', 'esquema', 'diagrama', 'lista detalhada', 'tabela', 'função', 'class', 'def ', 'import ', 'package', 'html', 'css', 'javascript', 'python', 'java', 'c++', 'sql'];
   const hasCanvasContent = canvasKeywords.some(keyword => 
       userQuery?.toLowerCase().includes(keyword) || 
       finalAiResponse.toLowerCase().includes('```') ||
-      finalAiResponse.toLowerCase().includes('exemplo:') ||
-      finalAiResponse.toLowerCase().includes('estrutura:')
+      finalAiResponse.includes('```') ||
+      (finalAiResponse.match(/```/g) || []).length >= 2
   );
 
   if (hasCanvasContent) {
-      const canvasPrompt = `Com base na pergunta do usuário e na resposta fornecida, extraia APENAS informações secundárias úteis para o Canvas (como scripts, códigos, exemplos práticos, estruturas, listas organizadas, etc.). Se não houver informações secundárias relevantes, responda apenas "VAZIO".\n\nPergunta: "${userQuery}"\nResposta: "${finalAiResponse}"`;
+      const canvasPrompt = `Extraia APENAS informações secundárias úteis para o Canvas (como scripts completos, códigos, exemplos práticos, estruturas detalhadas, listas organizadas, etc.). Se não houver informações secundárias relevantes, responda apenas "VAZIO".\n\nPergunta: "${userQuery}"\nResposta: "${finalAiResponse}"`;
       try {
           canvasContent = await callGemini([{text: canvasPrompt}], apiKey, fastModel);
           if (canvasContent.trim().toUpperCase() === "VAZIO") {
@@ -198,8 +261,10 @@ async function handleChatRequest(body) {
   }
 
   // Memória automática
-  let newMemory = null;
-  if (isAutoMemory) {
+  let newGlobalMemory = null;
+  let newChatMemory = null;
+  
+  if (autoMemoryGlobal || autoMemoryChat) {
       try {
           const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery || 'analise a imagem'}"\n\nRESPOSTA: "${finalAiResponse}"`;
           
@@ -208,11 +273,20 @@ async function handleChatRequest(body) {
           if(autoMemoryResponse.trim().startsWith('{')) {
               const parsedMemory = JSON.parse(autoMemoryResponse);
               if (parsedMemory.text && parsedMemory.topics) {
-                  newMemory = { 
-                      id: `mem-${Date.now()}`, 
-                      text: parsedMemory.text, 
-                      topics: parsedMemory.topics 
-                  };
+                  if (autoMemoryGlobal) {
+                      newGlobalMemory = { 
+                          id: `mem-global-${Date.now()}`, 
+                          text: parsedMemory.text, 
+                          topics: parsedMemory.topics 
+                      };
+                  }
+                  if (autoMemoryChat) {
+                      newChatMemory = { 
+                          id: `mem-chat-${Date.now()}`, 
+                          text: parsedMemory.text, 
+                          topics: parsedMemory.topics 
+                      };
+                  }
               }
           }
       } catch (e) {
@@ -223,7 +297,8 @@ async function handleChatRequest(body) {
   return {
       aiResponse: finalAiResponse,
       usedContext: usedContextTopics,
-      newMemory: newMemory,
+      newGlobalMemory: newGlobalMemory,
+      newChatMemory: newChatMemory,
       canvasContent: canvasContent
   };
 }
