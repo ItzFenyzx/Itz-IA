@@ -10,7 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@latest/dist/purify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* CSS Variables para Theming */
         :root {
             --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --bg-tertiary: #e9ecef;
             --text-primary: #212529; --text-secondary: #495057;
@@ -24,18 +23,16 @@
             --accent-pro: #fbbc04;
         }
 
-        /* Estilos Gerais */
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: var(--bg-primary); 
             color: var(--text-primary);
+            overflow-y: auto;
         }
         .chat-bubble-user { background-color: #3b82f6; color: white; }
         .chat-bubble-ai { background-color: var(--bg-tertiary); color: var(--text-primary); }
         .chat-bubble-ai-pro { background-color: #4a3c1a; border: 1px solid var(--accent-pro); color: #fef08a; }
-        .dark .chat-bubble-ai-pro { background-color: #4a3c1a; }
         
-        /* Estilos do Markdown */
         .markdown-content h1, .markdown-content h2, .markdown-content h3 { font-weight: bold; margin-top: 1rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.25rem;}
         .markdown-content p { margin-bottom: 0.75rem; line-height: 1.6; }
         .markdown-content ul, .markdown-content ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
@@ -43,144 +40,169 @@
         .markdown-content pre { background-color: var(--bg-secondary); padding: 1rem; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;}
         .markdown-content a { color: #8ab4f8; text-decoration: underline; }
 
-        /* Estilos de Componentes da UI */
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 4px; }
-        .modal-overlay { transition: opacity 0.3s ease; }
-        details > summary { list-style: none; }
-        details > summary::-webkit-details-marker { display: none; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #7a7a7a; }
+        
         .toggle-bg:after { content: ''; position: absolute; top: 2px; left: 2px; background: white; border-radius: 50%; height: 1.25rem; width: 1.25rem; transition: 0.2s; }
         input:checked + .toggle-bg:after { transform: translateX(100%); }
         input:checked + .toggle-bg { background-color: #34d399; }
+        
         .resizer { background-color: var(--border-color); width: 4px; cursor: col-resize; z-index: 10; opacity: 0.5; transition: opacity 0.2s; }
         .resizer:hover { opacity: 1; }
         .panel-hidden { display: none !important; }
         .chat-list-item.active { background-color: var(--bg-tertiary); }
         .view-btn.active { background-color: var(--bg-tertiary); color: var(--text-primary); }
         
-        /* Canvas Mode Styles */
-        .canvas-mode #main-chat-panel { width: 300px; flex-shrink: 0; }
-        .canvas-mode #canvas-panel { flex: 1; }
-        .canvas-mode #right-panel-container { flex: 1; }
+        .input-container { max-height: 200px; overflow-y: auto; }
+        .input-container::-webkit-scrollbar { width: 4px; }
+        .input-container::-webkit-scrollbar-track { background: transparent; }
+        .input-container::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
+        
+        .memory-search-container { position: relative; }
+        .memory-search-container::-webkit-scrollbar { width: 4px; }
+        .memory-search-container::-webkit-scrollbar-track { background: transparent; }
+        .memory-search-container::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
+        
+        .canvas-mode #main-chat-panel { width: 350px !important; flex-shrink: 0; }
+        .canvas-mode #right-panel-container { flex: 1 !important; width: auto !important; }
+        
+        .right-panel-collapsed { width: 0 !important; min-width: 0 !important; overflow: hidden; }
+        .expand-right-panel-btn { position: fixed; top: 50%; right: 10px; z-index: 30; transform: translateY(-50%); }
     </style>
 </head>
-<body class="flex flex-row h-screen antialiased overflow-hidden">
+<body class="flex flex-col h-screen antialiased">
     
-    <!-- Coluna 1: Barra Lateral Esquerda (Chats e Configurações) -->
-    <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
-        <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
-            <div class="flex items-center justify-between p-2 border-b border-[var(--border-color)]">
-                <h2 class="text-xl font-bold text-[var(--text-primary)]">Chats</h2>
-                <div class="flex items-center">
-                    <button id="newChatBtn" class="p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Novo Chat">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    </button>
-                    <button id="collapse-chat-list-btn" class="p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Chats">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
-                    </button>
+    <div class="flex flex-row flex-1 overflow-hidden">
+        <!-- Barra Lateral Esquerda -->
+        <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
+            <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
+                <div class="flex items-center justify-between p-2 border-b border-[var(--border-color)]">
+                    <h2 class="text-xl font-bold text-[var(--text-primary)]">Chats</h2>
+                    <div class="flex items-center">
+                        <button id="newChatBtn" class="p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Novo Chat">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        </button>
+                        <button id="collapse-chat-list-btn" class="p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Chats">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="chat-list-container" class="flex-grow overflow-y-auto custom-scrollbar">
+                    <!-- Os chats serão inseridos aqui pelo JS -->
                 </div>
             </div>
-            <div id="chat-list-container" class="flex-grow overflow-y-auto custom-scrollbar">
-                <!-- Os chats serão inseridos aqui pelo JS -->
-            </div>
-        </div>
-        <div class="p-2 border-t border-[var(--border-color)]">
-            <button id="settings-btn" class="w-full flex items-center p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Configurações">
-                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                <span>Configurações</span>
-            </button>
-        </div>
-    </div>
-    
-    <!-- Botão para reabrir a lista de chats -->
-    <button id="expand-chat-list-btn" class="panel-hidden absolute top-2 left-2 z-20 p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Chats">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
-    </button>
-    
-    <!-- Puxador de redimensionamento -->
-    <div id="main-resizer" class="resizer"></div>
-
-    <!-- Container Principal (Chat + Painel Direito) -->
-    <div id="main-container" class="flex flex-auto flex-row h-full">
-
-        <!-- Coluna 2: Chat Principal -->
-        <div id="main-chat-panel" class="flex flex-col flex-auto h-full p-4 transition-all duration-300 ease-in-out">
-            <div class="flex flex-col flex-auto flex-shrink-0 rounded-2xl bg-[var(--bg-secondary)] h-full p-4 shadow-2xl">
-                <div class="flex flex-col h-full overflow-hidden">
-                    <div class="text-center py-2 border-b border-[var(--border-color)]">
-                        <div class="flex justify-center items-center space-x-2">
-                            <h1 id="main-title" class="text-2xl font-bold text-[var(--text-primary)]">Phoenix Chat</h1>
-                            <button id="proModeBtn" title="Ativar Modo Pro" class="text-[var(--text-secondary)] hover:text-[var(--accent-pro)]">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="chat-container" class="flex flex-col h-full overflow-y-auto mb-4 custom-scrollbar">
-                         <div id="chat-messages" class="flex flex-col space-y-4 p-3">
-                            <div id="chat-placeholder" class="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
-                                <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5-2.5-7S3 7 3 7a8 8 0 0110.657 10.657l3.414 3.414a2 2 0 01-2.828 2.828l-3.414-3.414zM4 4l16 16"/>
-                                </svg>
-                                <p>Selecione um chat ou crie um novo para começar.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="attachment-preview-container" class="p-2 border-t border-[var(--border-color)] hidden"></div>
-                    <div class="flex flex-row items-end pt-4 border-t border-[var(--border-color)]">
-                        <button id="attachFileBtn" class="p-2 rounded-full hover:bg-[var(--bg-tertiary)] mr-2 flex-shrink-0 text-[var(--text-secondary)]" title="Anexar Imagem">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
-                            </svg>
-                        </button>
-                        <input type="file" id="file-input" class="hidden" accept="image/*">
-                        <div class="flex-grow relative">
-                            <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none" placeholder="Digite sua mensagem..." rows="1"></textarea>
-                            <button id="sendButton" class="absolute right-2 bottom-2 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white p-2">
-                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                 </div>
+            <div class="p-2 border-t border-[var(--border-color)]">
+                <button id="settings-btn" class="w-full flex items-center p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Configurações">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <span>Configurações</span>
+                </button>
             </div>
         </div>
         
-        <!-- Puxador para redimensionar o painel direito -->
-        <div id="right-panel-resizer" class="resizer panel-hidden"></div>
+        <!-- Botão para reabrir a lista de chats -->
+        <button id="expand-chat-list-btn" class="panel-hidden absolute top-2 left-2 z-20 p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Chats">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+        </button>
+        
+        <!-- Puxador de redimensionamento -->
+        <div id="main-resizer" class="resizer"></div>
 
-        <!-- Coluna 3: Painel Direito (Memória/Canvas) -->
-        <div id="right-panel-container" class="flex-col w-96 bg-[var(--bg-secondary)] p-2 transition-all duration-300 ease-in-out flex-shrink-0 hidden md:flex">
-            <div class="flex items-center justify-between p-2 border-b border-[var(--border-color)]">
-                <div class="flex space-x-1">
-                    <button id="view-memory-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn">Memória</button>
-                    <button id="view-canvas-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn">Canvas</button>
+        <!-- Container Principal -->
+        <div id="main-container" class="flex flex-auto flex-row h-full">
+
+            <!-- Chat Principal -->
+            <div id="main-chat-panel" class="flex flex-col flex-auto h-full p-4 transition-all duration-300 ease-in-out">
+                <div class="flex flex-col flex-auto flex-shrink-0 rounded-2xl bg-[var(--bg-secondary)] h-full p-4 shadow-2xl">
+                    <div class="flex flex-col h-full overflow-hidden">
+                        <div class="text-center py-2 border-b border-[var(--border-color)]">
+                            <div class="flex justify-center items-center space-x-2">
+                                <h1 id="main-title" class="text-2xl font-bold text-[var(--text-primary)]">Phoenix Chat</h1>
+                                <button id="proModeBtn" title="Ativar Modo Pro" class="text-[var(--text-secondary)] hover:text-[var(--accent-pro)]">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="chat-container" class="flex flex-col flex-1 overflow-y-auto mb-4 custom-scrollbar">
+                             <div id="chat-messages" class="flex flex-col space-y-4 p-3">
+                                <div id="chat-placeholder" class="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
+                                    <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5-2.5-7S3 7 3 7a8 8 0 0110.657 10.657l3.414 3.414a2 2 0 01-2.828 2.828l-3.414-3.414zM4 4l16 16"/>
+                                    </svg>
+                                    <p>Selecione um chat ou crie um novo para começar.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="attachment-preview-container" class="p-2 border-t border-[var(--border-color)] hidden"></div>
+                        <div class="flex flex-row items-end pt-4 border-t border-[var(--border-color)]">
+                            <button id="attachFileBtn" class="p-3 rounded-full hover:bg-[var(--bg-tertiary)] mr-2 flex-shrink-0 text-[var(--text-secondary)] self-end" title="Anexar Imagem">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                </svg>
+                            </button>
+                            <input type="file" id="file-input" class="hidden" accept="image/*">
+                            <div class="flex-grow relative input-container">
+                                <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none custom-scrollbar" placeholder="Digite sua mensagem..." rows="1"></textarea>
+                                <button id="sendButton" class="absolute right-2 bottom-2 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white p-2">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                     </div>
                 </div>
-                <button id="close-right-panel-btn" class="p-2 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Fechar Painel">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
             </div>
             
-            <div id="memory-panel" class="flex-grow flex-col hidden">
-                <div class="p-2 flex space-x-2 items-center justify-between">
-                    <input type="text" id="memorySearch" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Buscar...">
-                    <button id="addMemoryBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Add</button>
+            <!-- Puxador para redimensionar o painel direito -->
+            <div id="right-panel-resizer" class="resizer"></div>
+
+            <!-- Painel Direito -->
+            <div id="right-panel-container" class="flex-col w-96 bg-[var(--bg-secondary)] p-2 transition-all duration-300 ease-in-out flex-shrink-0 flex">
+                <div class="flex items-center justify-between p-2 border-b border-[var(--border-color)]">
+                    <div class="flex space-x-1">
+                        <button id="view-memory-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn active">Memória</button>
+                        <button id="view-canvas-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn">Canvas</button>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <button id="collapse-memory-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Memória">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <button id="collapse-canvas-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Canvas">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <button id="close-right-panel-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Fechar Painel">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                <div id="memory-container" class="flex-grow overflow-y-auto custom-scrollbar"></div>
-            </div>
-            
-            <div id="canvas-panel" class="flex-grow flex-col hidden">
-                <div id="canvas-content" class="flex-grow p-4 bg-white text-gray-800 rounded-md custom-scrollbar overflow-y-auto">
-                    <p class="text-center text-gray-500">O Canvas está vazio.</p>
+                
+                <div id="memory-panel" class="flex-grow flex-col flex">
+                    <div class="p-2 flex space-x-2 items-center justify-between">
+                        <input type="text" id="memorySearch" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] custom-scrollbar" placeholder="Buscar...">
+                        <button id="addMemoryBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Add</button>
+                    </div>
+                    <div id="memory-container" class="flex-grow overflow-y-auto custom-scrollbar"></div>
+                </div>
+                
+                <div id="canvas-panel" class="flex-grow flex-col hidden">
+                    <div id="canvas-content" class="flex-grow p-4 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md custom-scrollbar overflow-y-auto">
+                        <p class="text-center text-[var(--text-secondary)]">O Canvas está vazio.</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    
+    <!-- Botão para expandir painel direito -->
+    <button id="expand-right-panel-btn" class="expand-right-panel-btn panel-hidden p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Painel">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+    </button>
     
     <!-- Modais -->
     <div id="renameModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden z-50">
@@ -217,7 +239,7 @@
                     </label>
                 </div>
                  <div class="flex items-center justify-between">
-                    <label for="global-pro-mode-toggle-input" class="font-medium">Modo Profissional Global</label>
+                    <label for="global-pro-mode-toggle-input" class="font-medium">Persona Dinâmica</label>
                      <label for="global-pro-mode-toggle-input" class="flex items-center cursor-pointer">
                         <div class="relative">
                             <input type="checkbox" id="global-pro-mode-toggle-input" class="sr-only">
@@ -277,13 +299,12 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Estado global da aplicação
             let appState = {
                 activeChatId: null,
                 chats: {},
                 settings: {
                     theme: 'dark',
-                    globalProMode: false,
+                    dynamicPersona: true,
                     isProMode: false,
                     proModeToken: null,
                     autoMemory: false
@@ -292,11 +313,9 @@
                 isCanvasMode: false
             };
 
-            // Seletores de elementos
             const elements = {
                 body: document.body,
                 leftSidebar: document.getElementById('left-sidebar'),
-                chatListPanel: document.getElementById('chat-list-panel'),
                 mainContainer: document.getElementById('main-container'),
                 mainChatPanel: document.getElementById('main-chat-panel'),
                 rightPanelContainer: document.getElementById('right-panel-container'),
@@ -318,6 +337,9 @@
                 viewMemoryBtn: document.getElementById('view-memory-btn'),
                 viewCanvasBtn: document.getElementById('view-canvas-btn'),
                 closeRightPanelBtn: document.getElementById('close-right-panel-btn'),
+                expandRightPanelBtn: document.getElementById('expand-right-panel-btn'),
+                collapseMemoryBtn: document.getElementById('collapse-memory-btn'),
+                collapseCanvasBtn: document.getElementById('collapse-canvas-btn'),
                 attachFileBtn: document.getElementById('attachFileBtn'),
                 fileInput: document.getElementById('file-input'),
                 
@@ -350,7 +372,7 @@
                 closeSettings: document.getElementById('closeSettings'),
                 themeToggle: document.getElementById('theme-toggle'),
                 autoMemoryToggle: document.getElementById('auto-memory-toggle-input'),
-                globalProModeToggle: document.getElementById('global-pro-mode-toggle-input'),
+                dynamicPersonaToggle: document.getElementById('global-pro-mode-toggle-input'),
                 
                 mainResizer: document.getElementById('main-resizer'),
                 rightPanelResizer: document.getElementById('right-panel-resizer'),
@@ -364,14 +386,13 @@
             let confirmCallback = null;
             let renameCallback = null;
 
-            // Funções de persistência
             const saveState = () => {
                 const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v13', JSON.stringify(stateToSave));
+                localStorage.setItem('phoenixChatState_v14', JSON.stringify(stateToSave));
             };
 
             const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v13');
+                const savedState = localStorage.getItem('phoenixChatState_v14');
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
                     parsedState.settings = { ...appState.settings, ...parsedState.settings };
@@ -389,7 +410,6 @@
                 applySettings();
             };
             
-            // Funções de gestão de chats
             const createNewChat = (save = true) => {
                 const newChatId = `chat-${Date.now()}`;
                 appState.chats[newChatId] = { 
@@ -465,7 +485,6 @@
                 }
             };
             
-            // Funções de renderização
             const renderChatList = () => {
                 elements.chatListContainer.innerHTML = '';
                 Object.values(appState.chats).sort((a,b) => b.id.split('-')[1] - a.id.split('-')[1]).forEach(chat => {
@@ -498,7 +517,6 @@
 
                 elements.chatPlaceholder.classList.add('panel-hidden');
                 
-                // Sanitização com DOMPurify
                 const contentHTML = sender === 'user' 
                     ? DOMPurify.sanitize(text.replace(/</g, "&lt;").replace(/>/g, "&gt;")) 
                     : DOMPurify.sanitize(marked.parse(text));
@@ -564,10 +582,9 @@
                 const chat = appState.chats[appState.activeChatId];
                 if(!chat) return;
                 
-                // Sanitização com DOMPurify
                 const parsedContent = content 
                     ? DOMPurify.sanitize(marked.parse(content)) 
-                    : '<p class="text-center text-gray-500">O Canvas está vazio.</p>';
+                    : '<p class="text-center text-[var(--text-secondary)]">O Canvas está vazio.</p>';
                 elements.canvasContent.innerHTML = parsedContent;
                 
                 if (shouldSave) {
@@ -639,7 +656,6 @@
                     });
                 });
 
-                // Event listeners para deletar memórias individuais
                 elements.memoryContainer.addEventListener('click', (e) => {
                     if (e.target.classList.contains('delete-memory-btn')) {
                         const memoryId = e.target.getAttribute('data-id');
@@ -665,7 +681,6 @@
                 }
             };
             
-            // Função de envio de mensagem
             const handleSend = async () => {
                 const chat = appState.chats[appState.activeChatId];
                 if (!chat) return;
@@ -693,7 +708,8 @@
                         proToken: appState.settings.proModeToken,
                         isAutoMemory: chat.isAutoMemory,
                         memories: chat.memories,
-                        image: imagePayload
+                        image: imagePayload,
+                        useDynamicPersona: appState.settings.dynamicPersona
                     };
                     
                     const response = await fetch('/api/gemini', {
@@ -715,7 +731,13 @@
                     const result = await response.json();
                     
                     appendMessage(result.aiResponse, 'ai', appState.settings.isProMode, result.usedContext);
-                    renderCanvas(result.aiResponse);
+                    
+                    if (result.canvasContent && result.canvasContent.trim()) {
+                        renderCanvas(result.canvasContent);
+                        if (!appState.isCanvasMode) {
+                            switchView('canvas');
+                        }
+                    }
 
                     if (chat.isAutoMemory && result.newMemory) {
                         chat.memories.push(result.newMemory);
@@ -728,7 +750,6 @@
                 }
             };
             
-            // Funções de UI
             const switchView = (view) => {
                 appState.activeRightPanelView = view;
                 const isMemory = view === 'memory';
@@ -833,7 +854,6 @@
             };
             
             const applySettings = () => {
-                // Tema
                 if(appState.settings.theme === 'dark'){
                     elements.body.classList.add('dark');
                     elements.themeToggle.checked = true;
@@ -841,15 +861,8 @@
                     elements.body.classList.remove('dark');
                     elements.themeToggle.checked = false;
                 }
-                // Pro Mode Global
-                elements.globalProModeToggle.checked = appState.settings.globalProMode;
-                if(appState.settings.globalProMode){
-                    setProUI(true);
-                }
-                // Auto Memory
+                elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
                 elements.autoMemoryToggle.checked = appState.settings.autoMemory;
-                
-                // Right panel view
                 switchView(appState.activeRightPanelView || 'memory');
             };
 
@@ -870,13 +883,12 @@
                 }
             });
 
-            // Auto-resize textarea
             elements.userInput.addEventListener('input', () => {
                 elements.userInput.style.height = 'auto';
-                elements.userInput.style.height = elements.userInput.scrollHeight + 'px';
+                const newHeight = Math.min(elements.userInput.scrollHeight, 200);
+                elements.userInput.style.height = newHeight + 'px';
             });
 
-            // Pro Mode
             elements.proModeBtn.addEventListener('click', () => {
                 if (appState.settings.isProMode) {
                     setProUI(false);
@@ -892,7 +904,6 @@
                 elements.proPasswordInput.value = '';
             });
 
-            // Modals
             elements.closeNotification.addEventListener('click', () => {
                 elements.notificationModal.classList.add('hidden');
             });
@@ -925,7 +936,6 @@
                 renameCallback = null;
             });
 
-            // Settings
             elements.settingsBtn.addEventListener('click', () => {
                 elements.settingsModal.classList.remove('hidden');
             });
@@ -948,29 +958,27 @@
                 saveState();
             });
 
-            elements.globalProModeToggle.addEventListener('change', () => {
-                appState.settings.globalProMode = elements.globalProModeToggle.checked;
-                if (appState.settings.globalProMode) {
-                    setProUI(true);
-                } else {
-                    setProUI(false);
-                }
+            elements.dynamicPersonaToggle.addEventListener('change', () => {
+                appState.settings.dynamicPersona = elements.dynamicPersonaToggle.checked;
                 saveState();
             });
 
-            // Right panel
             elements.viewMemoryBtn.addEventListener('click', () => switchView('memory'));
             elements.viewCanvasBtn.addEventListener('click', () => switchView('canvas'));
+            
             elements.closeRightPanelBtn.addEventListener('click', () => {
-                elements.rightPanelContainer.classList.add('hidden');
-                elements.rightPanelResizer.classList.add('panel-hidden');
+                elements.rightPanelContainer.classList.add('right-panel-collapsed');
+                elements.expandRightPanelBtn.classList.remove('panel-hidden');
             });
 
-            // Memory
+            elements.expandRightPanelBtn.addEventListener('click', () => {
+                elements.rightPanelContainer.classList.remove('right-panel-collapsed');
+                elements.expandRightPanelBtn.classList.add('panel-hidden');
+            });
+
             elements.addMemoryBtn.addEventListener('click', () => openMemoryModal());
             elements.memorySearch.addEventListener('input', renderMemories);
 
-            // File attachment
             elements.attachFileBtn.addEventListener('click', () => {
                 elements.fileInput.click();
             });
@@ -1001,7 +1009,6 @@
                 }
             });
 
-            // Sidebar collapse
             elements.collapseChatListBtn.addEventListener('click', () => {
                 elements.leftSidebar.classList.add('panel-hidden');
                 elements.expandChatListBtn.classList.remove('panel-hidden');
@@ -1012,7 +1019,6 @@
                 elements.expandChatListBtn.classList.add('panel-hidden');
             });
 
-            // Inicialização
             loadState();
         });
     </script>
