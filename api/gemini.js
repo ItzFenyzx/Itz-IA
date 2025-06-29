@@ -1,20 +1,6 @@
-// ==================================================================
-//  Backend para Phoenix Chat - Versão Final
-//  Arquivo: /api/gemini.js
-//
-//  Implementa a arquitetura final com:
-//  - Roteador de Ações (Verificação de Senha vs. Chat)
-//  - Gestão de Anexo de Imagem (multimodal)
-//  - Memórias Base (Identidade da IA)
-//  - Correção de bug do Modo Pro
-//  - Lógica de Persona, RAG, e Memória Automática
-// ==================================================================
-
-const CONTEXT_BUDGET_CHARS = 3500; // Orçamento de caracteres para o contexto de memória
+const CONTEXT_BUDGET_CHARS = 3500;
 const CREATION_DATE = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-// --- MEMÓRIAS BASE DA IA ---
-// Este contexto é sempre adicionado para dar identidade à IA.
 const BASE_MEMORY_CONTEXT = `
 Você é o "Phoenix Chat", uma IA de conversação avançada.
 - Seu criador é Arthur Nascimento Nogueira.
@@ -24,13 +10,6 @@ Você é o "Phoenix Chat", uma IA de conversação avançada.
 - Responda sempre de forma útil, completa e seguindo a persona de especialista solicitada.
 `;
 
-/**
- * Função auxiliar para fazer chamadas à API do Gemini.
- * @param {Array<Object>} parts - O array de 'parts' para o prompt (pode incluir texto e/ou imagem).
- * @param {string} apiKey - A chave da API.
- * @param {string} model - O nome do modelo a ser usado (ex: 'gemini-1.5-flash-latest').
- * @returns {Promise<string>} A resposta de texto da IA.
- */
 async function callGemini(parts, apiKey, model) {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   
@@ -61,7 +40,6 @@ async function callGemini(parts, apiKey, model) {
 
   const data = await geminiResponse.json();
   
-  // Tratamento de resposta para garantir que sempre retorne uma string
   if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
     return data.candidates[0].content.parts[0].text;
   }
@@ -74,9 +52,6 @@ async function callGemini(parts, apiKey, model) {
   return "(A IA retornou uma resposta vazia)";
 }
 
-/**
- * Função principal da Vercel que age como um "roteador" de ações.
- */
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
     return response.status(405).json({ error: 'Method Not Allowed' });
@@ -85,7 +60,6 @@ export default async function handler(request, response) {
   const { action } = request.body;
 
   try {
-    // --- ROTEADOR DE AÇÕES ---
     if (action === 'verifyPassword') {
       const { token } = request.body;
       const correctPassword = process.env.PRO_MODE_PASSWORD;
@@ -107,13 +81,8 @@ export default async function handler(request, response) {
   }
 }
 
-/**
- * Função dedicada para lidar com a lógica de um pedido de chat.
- * @param {object} body - O corpo da requisição do frontend.
- * @returns {Promise<object>} A resposta completa para o frontend.
- */
 async function handleChatRequest(body) {
-  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories, image } = body;
+  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories, image, useDynamicPersona } = body;
 
   if (!userQuery && !image) {
     throw { statusCode: 400, message: 'Nenhum prompt ou imagem foi fornecido.' };
@@ -137,11 +106,8 @@ async function handleChatRequest(body) {
     modelForFinalAnswer = fastModel;
   }
 
-  // --- MONTAGEM DAS 'PARTS' DO PROMPT (SUPORTE MULTIMODAL) ---
-  // Esta parte transforma a pergunta do usuário e a imagem (se houver) num formato que a API entende.
   const userPromptParts = [];
   if (userQuery) {
-      // Adicionamos um prefixo para separar claramente a pergunta do utilizador do nosso prompt de sistema
       userPromptParts.push({ text: `\n\nPERGUNTA DO UTILIZADOR:\n"${userQuery}"` });
   }
   if (image) {
@@ -153,14 +119,13 @@ async function handleChatRequest(body) {
       });
   }
 
-  // --- LÓGICA DE CONTEXTO (RAG) ---
+  // RAG - Contexto de memória
   let contextPrompt = "";
   let usedContextTopics = [];
   if (memories && memories.length > 0) {
-      const allTopics = [...new Set(memories.flatMap(m => m.topics))].filter(Boolean); // Garante que não há tópicos vazios
+      const allTopics = [...new Set(memories.flatMap(m => m.topics))].filter(Boolean);
       if (allTopics.length > 0) {
           const topicRankPrompt = `Analise a pergunta do usuário e identifique quais dos seguintes tópicos são mais relevantes. Responda APENAS com os nomes dos tópicos, EM ORDEM DO MAIS PARA O MENOS RELEVANTE, separados por vírgula.\nTópicos disponíveis: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-          // Usamos a função callGemini, passando o prompt como uma 'part' de texto.
           const rankedTopicsResponse = await callGemini([{text: topicRankPrompt}], apiKey, fastModel);
           const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
           
@@ -186,37 +151,60 @@ async function handleChatRequest(body) {
       }
   }
 
-  // --- LÓGICA DE PERSONA DINÂMICA ---
-  const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery || 'Analisar a imagem fornecida'}"`;
-  const persona = await callGemini([{text: personaDefinitionPrompt}], apiKey, fastModel);
-  // --- MONTAGEM DO PROMPT FINAL ---
-  // Junta todas as peças: a identidade base, a persona dinâmica, o contexto da memória e a pergunta do utilizador.
-  const finalSystemPrompt = `
-    ${BASE_MEMORY_CONTEXT}
-    Assuma a persona de um(a) **${persona.trim()}**. 
-    ${contextPrompt}
-    Responda à pergunta do usuário de forma completa, profunda e com o estilo apropriado para essa persona, usando Markdown para formatação (títulos, listas, etc.). 
-    Se o contexto da memória não for relevante para a pergunta, ignore-o e responda de forma natural com base no seu conhecimento geral.
-  `;
+  // Persona dinâmica (apenas se ativada)
+  let persona = "";
+  if (useDynamicPersona) {
+      const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery || 'Analisar a imagem fornecida'}"`;
+      persona = await callGemini([{text: personaDefinitionPrompt}], apiKey, fastModel);
+  }
 
-  // Adiciona o prompt do sistema no início do array de 'parts' que será enviado para a API
+  // Prompt final
+  let finalSystemPrompt = BASE_MEMORY_CONTEXT;
+  if (useDynamicPersona && persona.trim()) {
+      finalSystemPrompt += `\nAssuma a persona de um(a) **${persona.trim()}**.`;
+  }
+  finalSystemPrompt += `\n${contextPrompt}`;
+  finalSystemPrompt += `\nResponda à pergunta do usuário de forma completa, profunda e com o estilo apropriado${useDynamicPersona ? ' para essa persona' : ''}, usando Markdown para formatação (títulos, listas, etc.).`;
+  if (contextPrompt) {
+      finalSystemPrompt += `\nSe o contexto da memória não for relevante para a pergunta, ignore-o e responda de forma natural com base no seu conhecimento geral.`;
+  }
+
   const finalPromptParts = [{ text: finalSystemPrompt }, ...userPromptParts];
   
-  // --- GERAÇÃO DA RESPOSTA PRINCIPAL ---
-  // Chama a API do Gemini com o prompt final e o modelo correto (Pro ou Flash)
+  // Resposta principal
   const finalAiResponse = await callGemini(finalPromptParts, apiKey, modelForFinalAnswer);
 
-  // --- LÓGICA DE MEMÓRIA AUTOMÁTICA (OPCIONAL) ---
-  // Se o utilizador ativou esta opção no frontend, o sistema tenta criar uma memória automaticamente.
+  // Verificar se precisa gerar conteúdo para o Canvas
+  let canvasContent = "";
+  const canvasKeywords = ['script', 'código', 'arquivo', 'documento', 'exemplo', 'template', 'estrutura', 'esquema', 'diagrama', 'lista', 'tabela'];
+  const hasCanvasContent = canvasKeywords.some(keyword => 
+      userQuery?.toLowerCase().includes(keyword) || 
+      finalAiResponse.toLowerCase().includes('```') ||
+      finalAiResponse.toLowerCase().includes('exemplo:') ||
+      finalAiResponse.toLowerCase().includes('estrutura:')
+  );
+
+  if (hasCanvasContent) {
+      const canvasPrompt = `Com base na pergunta do usuário e na resposta fornecida, extraia APENAS informações secundárias úteis para o Canvas (como scripts, códigos, exemplos práticos, estruturas, listas organizadas, etc.). Se não houver informações secundárias relevantes, responda apenas "VAZIO".\n\nPergunta: "${userQuery}"\nResposta: "${finalAiResponse}"`;
+      try {
+          canvasContent = await callGemini([{text: canvasPrompt}], apiKey, fastModel);
+          if (canvasContent.trim().toUpperCase() === "VAZIO") {
+              canvasContent = "";
+          }
+      } catch (e) {
+          console.error("Erro ao gerar conteúdo do Canvas:", e);
+          canvasContent = "";
+      }
+  }
+
+  // Memória automática
   let newMemory = null;
   if (isAutoMemory) {
       try {
           const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery || 'analise a imagem'}"\n\nRESPOSTA: "${finalAiResponse}"`;
           
-          // Usa o modelo rápido para esta tarefa, pois é mais eficiente.
           const autoMemoryResponse = await callGemini([{text: autoMemoryPrompt}], apiKey, fastModel);
           
-          // Tenta converter a resposta de texto em um objeto JSON.
           if(autoMemoryResponse.trim().startsWith('{')) {
               const parsedMemory = JSON.parse(autoMemoryResponse);
               if (parsedMemory.text && parsedMemory.topics) {
@@ -228,16 +216,14 @@ async function handleChatRequest(body) {
               }
           }
       } catch (e) {
-          // Se a memória automática falhar, o erro é registado no console do servidor, mas o chat continua a funcionar normalmente.
           console.error("Erro no processo de memória automática:", e);
       }
   }
   
-  // --- ENVIO DA RESPOSTA FINAL PARA O FRONTEND ---
-  // Retorna um objeto JSON contendo tudo o que o frontend precisa para atualizar a interface.
   return {
       aiResponse: finalAiResponse,
       usedContext: usedContextTopics,
-      newMemory: newMemory
+      newMemory: newMemory,
+      canvasContent: canvasContent
   };
 }
