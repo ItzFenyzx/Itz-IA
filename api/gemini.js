@@ -1,8 +1,9 @@
 // ==================================================================
-//  Backend para Chatbot v7 (Vercel Serverless Function)
+//  Backend para Phoenix Chat v8 (Vercel Serverless Function)
 //  Arquivo: /api/gemini.js
 //
-//  Implementa a verificação de senha segura para o Modo Pro.
+//  Implementa a arquitetura final com um sistema de ações para
+//  separar a verificação de senha da lógica de chat.
 // ==================================================================
 
 const CONTEXT_BUDGET_CHARS = 4000;
@@ -19,125 +20,156 @@ async function callGemini(prompt, apiKey, model) {
         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
     ]
   };
-  const geminiResponse = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+  const geminiResponse = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
   if (!geminiResponse.ok) {
     const errorText = await geminiResponse.text();
     console.error(`Erro na API do Gemini com o modelo ${model}: ${errorText}`);
-    if(geminiResponse.status === 429) { throw new Error('Limite de requisições da API atingido. Tente novamente em um minuto.'); }
+    if(geminiResponse.status === 429) {
+        throw new Error('Limite de requisições da API atingido. Tente novamente em um minuto.');
+    }
     throw new Error(`Erro na API do Gemini.`);
   }
+
   const data = await geminiResponse.json();
-  if (data.candidates && data.candidates[0]?.content.parts[0]?.text) { return data.candidates[0].content.parts[0].text; }
-  if (data.promptFeedback?.blockReason) { console.warn("Resposta bloqueada por segurança:", data.promptFeedback.blockReason); return `(Minha resposta foi bloqueada por segurança: ${data.promptFeedback.blockReason})`; }
+  if (data.candidates && data.candidates[0]?.content.parts[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  if (data.promptFeedback?.blockReason) {
+      console.warn("Resposta bloqueada por segurança:", data.promptFeedback.blockReason);
+      return `(Minha resposta foi bloqueada por segurança: ${data.promptFeedback.blockReason})`;
+  }
   throw new Error("Resposta da API inválida ou vazia.");
 }
 
-// Função principal da Vercel
+// Função principal da Vercel que age como um "roteador"
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Recebe 'prompt', 'isPro', 'proToken', 'isAutoMemory', e 'memories' do frontend.
-  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories } = request.body;
+  // O corpo agora contém um campo 'action' para decidir o que fazer.
+  const { action } = request.body;
+  const correctPassword = process.env.PRO_MODE_PASSWORD;
+
+  // --- ROTEADOR DE AÇÕES ---
+  if (action === 'verifyPassword') {
+    // Ação específica para verificar a senha.
+    const { token } = request.body;
+    if (!correctPassword) {
+      return response.status(500).json({ success: false, error: 'Senha do Modo Pro não configurada no servidor.' });
+    }
+    if (token === correctPassword) {
+      return response.status(200).json({ success: true });
+    } else {
+      return response.status(200).json({ success: false });
+    }
+  } 
+  else if (action === 'chat') {
+    // Ação padrão para processar uma pergunta do chat.
+    try {
+      const chatResponse = await handleChatRequest(request.body);
+      return response.status(200).json(chatResponse);
+    } catch (error) {
+       // A função handleChatRequest já lida com os seus próprios erros, mas adicionamos um catch-all.
+      return response.status(error.statusCode || 500).json({ error: error.message });
+    }
+  } 
+  else {
+    return response.status(400).json({ error: 'Ação desconhecida.' });
+  }
+}
+
+// Função dedicada para lidar com a lógica do chat
+async function handleChatRequest(body) {
+  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories } = body;
 
   if (!userQuery) {
-    return response.status(400).json({ error: 'Nenhum prompt foi fornecido.' });
+    throw { statusCode: 400, message: 'Nenhum prompt foi fornecido.' };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return response.status(500).json({ error: 'Chave de API não configurada no servidor.' });
+    throw { statusCode: 500, message: 'Chave de API não configurada no servidor.' };
   }
 
-  // --- VERIFICAÇÃO DE SENHA DO MODO PRO ---
+  const correctPassword = process.env.PRO_MODE_PASSWORD;
   let modelForFinalAnswer;
   const fastModel = 'gemini-1.5-flash-latest';
   const proModel = 'gemini-1.5-pro-latest';
   
   if (isPro) {
-    // Se o usuário quer usar o Modo Pro, verificamos a senha.
-    // A senha correta está segura nas variáveis de ambiente da Vercel.
-    const correctPassword = process.env.PRO_MODE_PASSWORD;
     if (!correctPassword) {
-        return response.status(500).json({ error: 'Senha do Modo Pro não foi configurada no servidor.' });
+      throw { statusCode: 500, message: 'Senha do Modo Pro não configurada no servidor.' };
     }
     if (proToken !== correctPassword) {
-      // Se a senha enviada pelo frontend não bate com a senha do servidor, retorna erro 401 Unauthorized.
-      return response.status(401).json({ error: 'Senha do Modo Pro incorreta.' });
+      throw { statusCode: 401, message: 'Senha do Modo Pro incorreta.' };
     }
-    // Se a senha estiver correta, define o modelo como Pro.
     modelForFinalAnswer = proModel;
   } else {
-    // Se não for modo pro, usa o modelo Flash.
     modelForFinalAnswer = fastModel;
   }
 
-  try {
-    // --- LÓGICA DE CONTEXTO (RAG) ---
-    let contextPrompt = "";
-    let usedContextTopics = [];
-    if (memories && memories.length > 0) {
-        const allTopics = [...new Set(memories.flatMap(m => m.topics))];
-        if (allTopics.length > 0) {
-            const topicRankPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-            const rankedTopicsResponse = await callGemini(topicRankPrompt, apiKey, fastModel);
-            const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
-            if (rankedTopics.length > 0) {
-                usedContextTopics = rankedTopics;
-                let contextMemories = []; let currentChars = 0;
-                for (const topic of rankedTopics) {
-                    const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
-                    for (const memory of memoriesInTopic) {
-                        if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { contextMemories.push(memory.text); currentChars += memory.text.length; } else { break; }
-                    }
-                    if (currentChars >= CONTEXT_BUDGET_CHARS) break;
-                }
-                if (contextMemories.length > 0) {
-                    const contextText = contextMemories.join("\n- ");
-                    contextPrompt = `Use o seguinte contexto da base de memória:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
-                }
-            }
-        }
-    }
-
-    // --- LÓGICA DE PERSONA DINÂMICA ---
-    const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery}"`;
-    const persona = await callGemini(personaDefinitionPrompt, apiKey, fastModel);
-
-    // --- MONTAGEM DO PROMPT FINAL ---
-    const finalPrompt = `Assuma a persona de um(a) **${persona.trim()}**. ${contextPrompt}Responda à pergunta do usuário de forma completa, profunda e com o estilo apropriado para essa persona, usando Markdown para formatação (títulos, listas, etc.).\n\nPergunta do usuário: "${userQuery}"`;
-    
-    // --- GERAÇÃO DA RESPOSTA PRINCIPAL ---
-    const finalAiResponse = await callGemini(finalPrompt, apiKey, modelForFinalAnswer);
-
-    // --- LÓGICA DE MEMÓRIA AUTOMÁTICA (OPCIONAL) ---
-    let newMemory = null;
-    if (isAutoMemory) {
-        try {
-            const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery}"\n\nRESPOSTA: "${finalAiResponse}"`;
-            const autoMemoryResponse = await callGemini(autoMemoryPrompt, apiKey, fastModel);
-            // Adiciona uma verificação para garantir que a resposta é um JSON válido
-            if(autoMemoryResponse.trim().startsWith('{')) {
-                const parsedMemory = JSON.parse(autoMemoryResponse);
-                if (parsedMemory.text && parsedMemory.topics) {
-                    newMemory = { id: `mem-${Date.now()}`, text: parsedMemory.text, topics: parsedMemory.topics };
-                }
-            }
-        } catch (e) {
-            console.error("Erro no processo de memória automática:", e);
-        }
-    }
-    
-    // --- ENVIO DA RESPOSTA FINAL PARA O FRONTEND ---
-    response.status(200).json({
-        aiResponse: finalAiResponse,
-        usedContext: usedContextTopics,
-        newMemory: newMemory
-    });
-
-  } catch (error) {
-    console.error("Erro no backend:", error.message);
-    response.status(500).json({ error: `Erro interno do servidor: ${error.message}` });
+  // --- LÓGICA DE CONTEXTO (RAG) ---
+  let contextPrompt = "";
+  let usedContextTopics = [];
+  if (memories && memories.length > 0) {
+      const allTopics = [...new Set(memories.flatMap(m => m.topics))];
+      if (allTopics.length > 0) {
+          const topicRankPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
+          const rankedTopicsResponse = await callGemini(topicRankPrompt, apiKey, fastModel);
+          const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
+          if (rankedTopics.length > 0) {
+              usedContextTopics = rankedTopics;
+              let contextMemories = []; let currentChars = 0;
+              for (const topic of rankedTopics) {
+                  const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
+                  for (const memory of memoriesInTopic) {
+                      if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { contextMemories.push(memory.text); currentChars += memory.text.length; } else { break; }
+                  }
+                  if (currentChars >= CONTEXT_BUDGET_CHARS) break;
+              }
+              if (contextMemories.length > 0) {
+                  const contextText = contextMemories.join("\n- ");
+                  contextPrompt = `Use o seguinte contexto da base de memória se for relevante, mas não se limite a ele:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
+              }
+          }
+      }
   }
+
+  // --- LÓGICA DE PERSONA DINÂMICA ---
+  const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery}"`;
+  const persona = await callGemini(personaDefinitionPrompt, apiKey, fastModel);
+
+  // --- MONTAGEM DO PROMPT FINAL ---
+  const finalPrompt = `Assuma a persona de um(a) **${persona.trim()}**. ${contextPrompt}Responda à pergunta do usuário de forma completa, profunda e com o estilo apropriado para essa persona, usando Markdown para formatação (títulos, listas, etc.). Se o contexto fornecido não for relevante, ignore-o e responda de forma natural com base no seu conhecimento geral.\n\nPergunta do usuário: "${userQuery}"`;
+  
+  // --- GERAÇÃO DA RESPOSTA PRINCIPAL ---
+  const finalAiResponse = await callGemini(finalPrompt, apiKey, modelForFinalAnswer);
+
+  // --- LÓGICA DE MEMÓRIA AUTOMÁTICA ---
+  let newMemory = null;
+  if (isAutoMemory) {
+      try {
+          const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery}"\n\nRESPOSTA: "${finalAiResponse}"`;
+          const autoMemoryResponse = await callGemini(autoMemoryPrompt, apiKey, fastModel);
+          if(autoMemoryResponse.trim().startsWith('{')) {
+              const parsedMemory = JSON.parse(autoMemoryResponse);
+              if (parsedMemory.text && parsedMemory.topics) {
+                  newMemory = { id: `mem-${Date.now()}`, text: parsedMemory.text, topics: parsedMemory.topics };
+              }
+          }
+      } catch (e) { console.error("Erro no processo de memória automática:", e); }
+  }
+  
+  return {
+      aiResponse: finalAiResponse,
+      usedContext: usedContextTopics,
+      newMemory: newMemory
+  };
 }
