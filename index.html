@@ -8,6 +8,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@latest/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@latest/dist/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -55,21 +58,55 @@
         .chat-list-item.active { background-color: var(--bg-tertiary); }
         .view-btn.active { background-color: var(--bg-tertiary); color: var(--text-primary); }
         
-        .input-container { max-height: 200px; overflow-y: auto; }
-        .input-container::-webkit-scrollbar { width: 4px; }
-        .input-container::-webkit-scrollbar-track { background: transparent; }
-        .input-container::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
-        
-        .memory-search-container { position: relative; }
-        .memory-search-container::-webkit-scrollbar { width: 4px; }
-        .memory-search-container::-webkit-scrollbar-track { background: transparent; }
-        .memory-search-container::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
+        .input-container { max-height: 200px; }
+        .input-container textarea { resize: none; overflow-y: auto; }
+        .input-container textarea::-webkit-scrollbar { width: 4px; }
+        .input-container textarea::-webkit-scrollbar-track { background: transparent; }
+        .input-container textarea::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
         
         .canvas-mode #main-chat-panel { width: 350px !important; flex-shrink: 0; }
-        .canvas-mode #right-panel-container { flex: 1 !important; width: auto !important; }
+        .canvas-mode #right-panel-container { flex: 1 !important; width: auto !important; max-width: 60% !important; }
         
         .right-panel-collapsed { width: 0 !important; min-width: 0 !important; overflow: hidden; }
         .expand-right-panel-btn { position: fixed; top: 50%; right: 10px; z-index: 30; transform: translateY(-50%); }
+        
+        .canvas-content { max-height: 70vh; overflow-y: auto; }
+        .canvas-content pre { position: relative; }
+        .canvas-content .line-numbers { position: absolute; left: 0; top: 0; padding: 1rem 0.5rem; background: rgba(0,0,0,0.1); border-right: 1px solid var(--border-color); font-family: monospace; font-size: 0.8em; line-height: 1.5; color: var(--text-secondary); }
+        .canvas-content .code-content { padding-left: 3rem; }
+        
+        .memory-topic-header { cursor: pointer; }
+        .memory-topic-header:hover .rename-topic-btn { opacity: 1; }
+        .rename-topic-btn { opacity: 0; transition: opacity 0.2s; }
+        
+        /* Redimensionamento do Canvas */
+        #right-panel-container {
+            min-width: 384px; /* 96 * 4 = 384px (w-96) */
+            max-width: 60%;
+            transition: width 0.3s ease-in-out;
+        }
+        
+        .canvas-resizer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: var(--border-color);
+            cursor: col-resize;
+            z-index: 20;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        
+        .canvas-resizer:hover {
+            opacity: 1;
+            background-color: #3b82f6;
+        }
+        
+        .canvas-resizing {
+            user-select: none;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
@@ -137,18 +174,18 @@
                             </div>
                         </div>
                         <div id="attachment-preview-container" class="p-2 border-t border-[var(--border-color)] hidden"></div>
-                        <div class="flex flex-row items-end pt-4 border-t border-[var(--border-color)]">
-                            <button id="attachFileBtn" class="p-3 rounded-full hover:bg-[var(--bg-tertiary)] mr-2 flex-shrink-0 text-[var(--text-secondary)] self-end" title="Anexar Imagem">
+                        <div class="flex flex-row items-center pt-4 border-t border-[var(--border-color)] space-x-2">
+                            <button id="attachFileBtn" class="p-3 rounded-full hover:bg-[var(--bg-tertiary)] flex-shrink-0 text-[var(--text-secondary)]" title="Anexar Imagem">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                 </svg>
                             </button>
                             <input type="file" id="file-input" class="hidden" accept="image/*">
                             <div class="flex-grow relative input-container">
-                                <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none custom-scrollbar" placeholder="Digite sua mensagem..." rows="1"></textarea>
-                                <button id="sendButton" class="absolute right-2 bottom-2 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white p-2">
+                                <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none" placeholder="Digite sua mensagem..." rows="1"></textarea>
+                                <button id="sendButton" class="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white p-2">
                                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
                                     </svg>
                                 </button>
                             </div>
@@ -157,23 +194,17 @@
                 </div>
             </div>
             
-            <!-- Puxador para redimensionar o painel direito -->
-            <div id="right-panel-resizer" class="resizer"></div>
-
             <!-- Painel Direito -->
-            <div id="right-panel-container" class="flex-col w-96 bg-[var(--bg-secondary)] p-2 transition-all duration-300 ease-in-out flex-shrink-0 flex">
+            <div id="right-panel-container" class="relative flex-col w-96 bg-[var(--bg-secondary)] p-2 transition-all duration-300 ease-in-out flex-shrink-0 flex">
+                <!-- Resizer do Canvas -->
+                <div id="canvas-resizer" class="canvas-resizer"></div>
+                
                 <div class="flex items-center justify-between p-2 border-b border-[var(--border-color)]">
                     <div class="flex space-x-1">
                         <button id="view-memory-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn active">Memória</button>
                         <button id="view-canvas-btn" class="px-3 py-1 text-sm font-semibold rounded-md view-btn">Canvas</button>
                     </div>
                     <div class="flex items-center space-x-1">
-                        <button id="collapse-memory-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Memória">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                        <button id="collapse-canvas-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Recolher Canvas">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
                         <button id="close-right-panel-btn" class="p-1 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]" title="Fechar Painel">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -184,14 +215,18 @@
                 
                 <div id="memory-panel" class="flex-grow flex-col flex">
                     <div class="p-2 flex space-x-2 items-center justify-between">
-                        <input type="text" id="memorySearch" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] custom-scrollbar" placeholder="Buscar...">
+                        <input type="text" id="memorySearch" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Buscar...">
                         <button id="addMemoryBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Add</button>
+                    </div>
+                    <div class="p-2 flex space-x-1">
+                        <button id="view-global-memory-btn" class="px-2 py-1 text-xs font-semibold rounded-md bg-gray-600 text-white">Global</button>
+                        <button id="view-chat-memory-btn" class="px-2 py-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300">Chat</button>
                     </div>
                     <div id="memory-container" class="flex-grow overflow-y-auto custom-scrollbar"></div>
                 </div>
                 
                 <div id="canvas-panel" class="flex-grow flex-col hidden">
-                    <div id="canvas-content" class="flex-grow p-4 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md custom-scrollbar overflow-y-auto">
+                    <div id="canvas-content" class="flex-grow p-4 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md custom-scrollbar overflow-y-auto canvas-content">
                         <p class="text-center text-[var(--text-secondary)]">O Canvas está vazio.</p>
                     </div>
                 </div>
@@ -216,6 +251,17 @@
         </div>
     </div>
     
+    <div id="renameTopicModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden z-50">
+        <div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-[var(--text-primary)]">
+            <h3 class="text-lg font-bold mb-4">Renomear Tópico</h3>
+            <input type="text" id="renameTopicInput" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Novo nome do tópico...">
+            <div class="flex justify-end space-x-2">
+                <button id="cancelRenameTopic" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button>
+                <button id="confirmRenameTopic" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Salvar</button>
+            </div>
+        </div>
+    </div>
+    
     <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden z-50">
         <div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-[var(--text-primary)]">
             <h3 class="text-lg font-bold mb-4 border-b border-[var(--border-color)] pb-2">Configurações</h3>
@@ -230,19 +276,28 @@
                     </label>
                 </div>
                 <div class="flex items-center justify-between">
-                    <label for="auto-memory-toggle-input" class="font-medium">Memória Automática</label>
-                     <label for="auto-memory-toggle-input" class="flex items-center cursor-pointer">
+                    <label for="auto-memory-global-toggle-input" class="font-medium">Memória Automática Global</label>
+                     <label for="auto-memory-global-toggle-input" class="flex items-center cursor-pointer">
                         <div class="relative">
-                            <input type="checkbox" id="auto-memory-toggle-input" class="sr-only">
+                            <input type="checkbox" id="auto-memory-global-toggle-input" class="sr-only">
+                            <div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div>
+                        </div>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between">
+                    <label for="auto-memory-chat-toggle-input" class="font-medium">Memória Automática por Chat</label>
+                     <label for="auto-memory-chat-toggle-input" class="flex items-center cursor-pointer">
+                        <div class="relative">
+                            <input type="checkbox" id="auto-memory-chat-toggle-input" class="sr-only">
                             <div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div>
                         </div>
                     </label>
                 </div>
                  <div class="flex items-center justify-between">
-                    <label for="global-pro-mode-toggle-input" class="font-medium">Persona Dinâmica</label>
-                     <label for="global-pro-mode-toggle-input" class="flex items-center cursor-pointer">
+                    <label for="dynamic-persona-toggle-input" class="font-medium">Persona Dinâmica</label>
+                     <label for="dynamic-persona-toggle-input" class="flex items-center cursor-pointer">
                         <div class="relative">
-                            <input type="checkbox" id="global-pro-mode-toggle-input" class="sr-only">
+                            <input type="checkbox" id="dynamic-persona-toggle-input" class="sr-only">
                             <div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div>
                         </div>
                     </label>
@@ -260,6 +315,10 @@
             <h3 class="text-lg font-bold mb-4">Salvar Memória Manual</h3>
             <textarea id="memoryText" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 h-32 mb-4" placeholder="Texto da memória..."></textarea>
             <input type="text" id="memoryTopics" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Tópicos (separados por vírgula)...">
+            <div class="flex items-center mb-4">
+                <input type="checkbox" id="isGlobalMemory" class="mr-2">
+                <label for="isGlobalMemory" class="text-sm">Salvar como memória global</label>
+            </div>
             <div class="flex justify-end space-x-2">
                 <button id="cancelSave" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button>
                 <button id="confirmSave" class="px-4 py-2 bg-green-600 text-white rounded-lg">Salvar</button>
@@ -302,15 +361,19 @@
             let appState = {
                 activeChatId: null,
                 chats: {},
+                globalMemories: [],
                 settings: {
                     theme: 'dark',
                     dynamicPersona: true,
                     isProMode: false,
                     proModeToken: null,
-                    autoMemory: false
+                    autoMemoryGlobal: false,
+                    autoMemoryChat: false
                 },
                 activeRightPanelView: 'memory',
-                isCanvasMode: false
+                activeMemoryView: 'global',
+                isCanvasMode: false,
+                rightPanelWidth: 384 // Largura inicial em pixels (w-96)
             };
 
             const elements = {
@@ -338,10 +401,11 @@
                 viewCanvasBtn: document.getElementById('view-canvas-btn'),
                 closeRightPanelBtn: document.getElementById('close-right-panel-btn'),
                 expandRightPanelBtn: document.getElementById('expand-right-panel-btn'),
-                collapseMemoryBtn: document.getElementById('collapse-memory-btn'),
-                collapseCanvasBtn: document.getElementById('collapse-canvas-btn'),
                 attachFileBtn: document.getElementById('attachFileBtn'),
                 fileInput: document.getElementById('file-input'),
+                
+                viewGlobalMemoryBtn: document.getElementById('view-global-memory-btn'),
+                viewChatMemoryBtn: document.getElementById('view-chat-memory-btn'),
                 
                 passwordModal: document.getElementById('passwordModal'),
                 proPasswordInput: document.getElementById('proPasswordInput'),
@@ -354,6 +418,7 @@
                 memoryModal: document.getElementById('memoryModal'),
                 memoryText: document.getElementById('memoryText'),
                 memoryTopics: document.getElementById('memoryTopics'),
+                isGlobalMemory: document.getElementById('isGlobalMemory'),
                 cancelSave: document.getElementById('cancelSave'),
                 confirmSave: document.getElementById('confirmSave'),
                 
@@ -367,15 +432,21 @@
                 confirmRename: document.getElementById('confirmRename'),
                 cancelRename: document.getElementById('cancelRename'),
                 
+                renameTopicModal: document.getElementById('renameTopicModal'),
+                renameTopicInput: document.getElementById('renameTopicInput'),
+                confirmRenameTopic: document.getElementById('confirmRenameTopic'),
+                cancelRenameTopic: document.getElementById('cancelRenameTopic'),
+                
                 settingsModal: document.getElementById('settingsModal'),
                 settingsBtn: document.getElementById('settings-btn'),
                 closeSettings: document.getElementById('closeSettings'),
                 themeToggle: document.getElementById('theme-toggle'),
-                autoMemoryToggle: document.getElementById('auto-memory-toggle-input'),
-                dynamicPersonaToggle: document.getElementById('global-pro-mode-toggle-input'),
+                autoMemoryGlobalToggle: document.getElementById('auto-memory-global-toggle-input'),
+                autoMemoryChatToggle: document.getElementById('auto-memory-chat-toggle-input'),
+                dynamicPersonaToggle: document.getElementById('dynamic-persona-toggle-input'),
                 
                 mainResizer: document.getElementById('main-resizer'),
-                rightPanelResizer: document.getElementById('right-panel-resizer'),
+                canvasResizer: document.getElementById('canvas-resizer'),
                 
                 addMemoryBtn: document.getElementById('addMemoryBtn'),
                 memorySearch: document.getElementById('memorySearch'),
@@ -385,19 +456,66 @@
             let attachedFile = null;
             let confirmCallback = null;
             let renameCallback = null;
+            let renameTopicCallback = null;
+            let isResizing = false;
+
+            // Funcionalidade de redimensionamento do Canvas
+            const initCanvasResizer = () => {
+                let startX, startWidth;
+                
+                const startResize = (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startWidth = elements.rightPanelContainer.offsetWidth;
+                    document.body.classList.add('canvas-resizing');
+                    document.addEventListener('mousemove', doResize);
+                    document.addEventListener('mouseup', stopResize);
+                    e.preventDefault();
+                };
+                
+                const doResize = (e) => {
+                    if (!isResizing) return;
+                    
+                    const deltaX = startX - e.clientX; // Invertido porque o resizer está à esquerda
+                    const newWidth = startWidth + deltaX;
+                    const minWidth = 384; // 24rem em pixels
+                    const maxWidth = window.innerWidth * 0.6; // 60% da largura da tela
+                    
+                    const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+                    
+                    elements.rightPanelContainer.style.width = clampedWidth + 'px';
+                    appState.rightPanelWidth = clampedWidth;
+                    saveState();
+                };
+                
+                const stopResize = () => {
+                    isResizing = false;
+                    document.body.classList.remove('canvas-resizing');
+                    document.removeEventListener('mousemove', doResize);
+                    document.removeEventListener('mouseup', stopResize);
+                };
+                
+                elements.canvasResizer.addEventListener('mousedown', startResize);
+            };
 
             const saveState = () => {
                 const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v14', JSON.stringify(stateToSave));
+                localStorage.setItem('phoenixChatState_v16', JSON.stringify(stateToSave));
             };
 
             const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v14');
+                const savedState = localStorage.getItem('phoenixChatState_v16');
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
                     parsedState.settings = { ...appState.settings, ...parsedState.settings };
                     appState = { ...appState, ...parsedState };
                 }
+                
+                // Aplicar largura salva do painel direito
+                if (appState.rightPanelWidth) {
+                    elements.rightPanelContainer.style.width = appState.rightPanelWidth + 'px';
+                }
+                
                 if (Object.keys(appState.chats).length === 0) {
                     createNewChat(false);
                 } else {
@@ -417,7 +535,6 @@
                     name: "Novo Chat", 
                     history: [], 
                     memories: [], 
-                    isAutoMemory: appState.settings.autoMemory, 
                     canvasContent: '' 
                 };
                 if (save) { 
@@ -457,7 +574,6 @@
                     chat.history = [];
                     elements.chatPlaceholder.classList.remove('panel-hidden');
                 }
-                elements.autoMemoryToggle.checked = chat.isAutoMemory;
                 renderMemories();
                 renderCanvas(chat.canvasContent, false);
                 setProUI(appState.settings.isProMode && appState.settings.proModeToken);
@@ -582,10 +698,25 @@
                 const chat = appState.chats[appState.activeChatId];
                 if(!chat) return;
                 
-                const parsedContent = content 
-                    ? DOMPurify.sanitize(marked.parse(content)) 
-                    : '<p class="text-center text-[var(--text-secondary)]">O Canvas está vazio.</p>';
-                elements.canvasContent.innerHTML = parsedContent;
+                if (!content || content.trim() === '') {
+                    elements.canvasContent.innerHTML = '<p class="text-center text-[var(--text-secondary)]">O Canvas está vazio.</p>';
+                } else {
+                    let parsedContent = DOMPurify.sanitize(marked.parse(content));
+                    
+                    // Adicionar números de linha para blocos de código
+                    parsedContent = parsedContent.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (match, attrs, code) => {
+                        const lines = code.split('\n');
+                        const lineNumbers = lines.map((_, i) => i + 1).join('\n');
+                        return `<pre class="relative"><div class="line-numbers">${lineNumbers}</div><code${attrs} class="code-content">${code}</code></pre>`;
+                    });
+                    
+                    elements.canvasContent.innerHTML = parsedContent;
+                    
+                    // Aplicar syntax highlighting se Prism estiver disponível
+                    if (typeof Prism !== 'undefined') {
+                        Prism.highlightAllUnder(elements.canvasContent);
+                    }
+                }
                 
                 if (shouldSave) {
                     chat.canvasContent = content;
@@ -593,18 +724,27 @@
                 }
             };
 
+            const getCurrentMemories = () => {
+                if (appState.activeMemoryView === 'global') {
+                    return appState.globalMemories;
+                } else {
+                    const chat = appState.chats[appState.activeChatId];
+                    return chat ? chat.memories : [];
+                }
+            };
+
             const renderMemories = () => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat || !chat.memories) {
-                    elements.memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória salva para este chat.</div>`;
+                const memories = getCurrentMemories();
+                
+                if (!memories || memories.length === 0) {
+                    elements.memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória salva.</div>`;
                     return;
                 }
 
                 elements.memoryContainer.innerHTML = '';
                 const searchTerm = elements.memorySearch.value.toLowerCase();
                 
-                const memoriesToRender = chat.memories;
-                const filteredMemories = memoriesToRender.filter(mem => mem.text.toLowerCase().includes(searchTerm));
+                const filteredMemories = memories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
 
                 const groupedByTopic = filteredMemories.reduce((acc, mem) => {
                     (mem.topics || []).forEach(topic => {
@@ -627,14 +767,14 @@
                     details.open = searchTerm.length > 0;
 
                     const summary = document.createElement('summary');
-                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center';
+                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header';
                     
                     const topicMemories = groupedByTopic[topic];
                     const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
                     let warningHTML = (totalChars > 5000) 
                         ? `<span class="text-yellow-400" title="Tópico grande. Considere dividi-lo.">⚠️</span>` 
                         : '';
-                    summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span> <div class="flex items-center space-x-2">${warningHTML}<button class="delete-topic-btn p-1 hover:text-red-400 text-xs" title="Apagar Tópico">&times;</button></div>`;
+                    summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span> <div class="flex items-center space-x-2">${warningHTML}<button class="rename-topic-btn p-1 hover:text-blue-400 text-xs" title="Renomear Tópico">&#9998;</button><button class="delete-topic-btn p-1 hover:text-red-400 text-xs" title="Apagar Tópico">&times;</button></div>`;
                     
                     const topicContent = document.createElement('div');
                     topicContent.className = 'pl-4 pt-2';
@@ -649,6 +789,11 @@
                     details.appendChild(summary);
                     details.appendChild(topicContent);
                     elements.memoryContainer.appendChild(details);
+
+                    summary.querySelector('.rename-topic-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        showRenameTopicModal(topic);
+                    });
 
                     summary.querySelector('.delete-topic-btn').addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -706,8 +851,10 @@
                         prompt: query, 
                         isPro: appState.settings.isProMode, 
                         proToken: appState.settings.proModeToken,
-                        isAutoMemory: chat.isAutoMemory,
-                        memories: chat.memories,
+                        autoMemoryGlobal: appState.settings.autoMemoryGlobal,
+                        autoMemoryChat: appState.settings.autoMemoryChat,
+                        globalMemories: appState.globalMemories,
+                        chatMemories: chat.memories,
                         image: imagePayload,
                         useDynamicPersona: appState.settings.dynamicPersona
                     };
@@ -739,10 +886,20 @@
                         }
                     }
 
-                    if (chat.isAutoMemory && result.newMemory) {
-                        chat.memories.push(result.newMemory);
+                    if (result.newGlobalMemory) {
+                        appState.globalMemories.push(result.newGlobalMemory);
                         saveState();
-                        renderMemories();
+                        if (appState.activeMemoryView === 'global') {
+                            renderMemories();
+                        }
+                    }
+
+                    if (result.newChatMemory) {
+                        chat.memories.push(result.newChatMemory);
+                        saveState();
+                        if (appState.activeMemoryView === 'chat') {
+                            renderMemories();
+                        }
                     }
                 } catch (error) {
                     showLoadingIndicator(false);
@@ -759,6 +916,22 @@
                 elements.canvasPanel.classList.toggle('flex', !isMemory);
                 elements.viewMemoryBtn.classList.toggle('active', isMemory);
                 elements.viewCanvasBtn.classList.toggle('active', !isMemory);
+                
+                if (!isMemory) {
+                    elements.body.classList.add('canvas-mode');
+                } else {
+                    elements.body.classList.remove('canvas-mode');
+                }
+                
+                saveState();
+            };
+
+            const switchMemoryView = (view) => {
+                appState.activeMemoryView = view;
+                const isGlobal = view === 'global';
+                elements.viewGlobalMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+                elements.viewChatMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${!isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+                renderMemories();
                 saveState();
             };
             
@@ -776,41 +949,76 @@
             const openMemoryModal = (rawText = null) => {
                 elements.memoryText.value = rawText || '';
                 elements.memoryTopics.value = '';
+                elements.isGlobalMemory.checked = appState.activeMemoryView === 'global';
                 elements.memoryModal.classList.remove('hidden');
                 elements.memoryText.focus();
             };
 
             const saveMemory = () => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat) return;
                 const text = elements.memoryText.value.trim();
                 const topics = elements.memoryTopics.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+                const isGlobal = elements.isGlobalMemory.checked;
+                
                 if (!text || topics.length === 0) { 
                     alert('Texto e tópico são obrigatórios.'); 
                     return; 
                 }
-                if (!chat.memories) chat.memories = [];
-                chat.memories.push({ id: `mem-${Date.now()}`, text, topics });
+                
+                const newMemory = { id: `mem-${Date.now()}`, text, topics };
+                
+                if (isGlobal) {
+                    appState.globalMemories.push(newMemory);
+                } else {
+                    const chat = appState.chats[appState.activeChatId];
+                    if (chat) {
+                        if (!chat.memories) chat.memories = [];
+                        chat.memories.push(newMemory);
+                    }
+                }
+                
                 saveState();
                 renderMemories();
                 elements.memoryModal.classList.add('hidden');
             };
             
             const deleteMemory = (memoryId) => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat || !chat.memories) return;
-                chat.memories = chat.memories.filter(mem => mem.id !== memoryId);
+                const memories = getCurrentMemories();
+                const index = memories.findIndex(mem => mem.id === memoryId);
+                if (index !== -1) {
+                    memories.splice(index, 1);
+                    saveState();
+                    renderMemories();
+                }
+            };
+
+            const deleteTopic = (topicName) => {
+                const memories = getCurrentMemories();
+                memories.forEach(mem => { 
+                    mem.topics = mem.topics.filter(t => t !== topicName); 
+                });
+                const filteredMemories = memories.filter(mem => mem.topics.length > 0);
+                
+                if (appState.activeMemoryView === 'global') {
+                    appState.globalMemories = filteredMemories;
+                } else {
+                    const chat = appState.chats[appState.activeChatId];
+                    if (chat) {
+                        chat.memories = filteredMemories;
+                    }
+                }
+                
                 saveState();
                 renderMemories();
             };
 
-            const deleteTopic = (topicName) => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat || !chat.memories) return;
-                chat.memories.forEach(mem => { 
-                    mem.topics = mem.topics.filter(t => t !== topicName); 
+            const renameTopic = (oldName, newName) => {
+                if (!newName || newName.trim() === '') return;
+                
+                const memories = getCurrentMemories();
+                memories.forEach(mem => {
+                    mem.topics = mem.topics.map(t => t === oldName ? newName.toLowerCase() : t);
                 });
-                chat.memories = chat.memories.filter(mem => mem.topics.length > 0);
+                
                 saveState();
                 renderMemories();
             };
@@ -862,8 +1070,10 @@
                     elements.themeToggle.checked = false;
                 }
                 elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
-                elements.autoMemoryToggle.checked = appState.settings.autoMemory;
+                elements.autoMemoryGlobalToggle.checked = appState.settings.autoMemoryGlobal;
+                elements.autoMemoryChatToggle.checked = appState.settings.autoMemoryChat;
                 switchView(appState.activeRightPanelView || 'memory');
+                switchMemoryView(appState.activeMemoryView || 'global');
             };
 
             const showRenameModal = (chatId, currentName) => {
@@ -871,6 +1081,13 @@
                 renameCallback = (newName) => renameChat(chatId, newName);
                 elements.renameModal.classList.remove('hidden');
                 elements.renameInput.focus();
+            };
+
+            const showRenameTopicModal = (currentName) => {
+                elements.renameTopicInput.value = currentName;
+                renameTopicCallback = (newName) => renameTopic(currentName, newName);
+                elements.renameTopicModal.classList.remove('hidden');
+                elements.renameTopicInput.focus();
             };
 
             // Event Listeners
@@ -936,6 +1153,19 @@
                 renameCallback = null;
             });
 
+            elements.confirmRenameTopic.addEventListener('click', () => {
+                const newName = elements.renameTopicInput.value.trim();
+                if (newName && renameTopicCallback) {
+                    renameTopicCallback(newName);
+                }
+                elements.renameTopicModal.classList.add('hidden');
+                renameTopicCallback = null;
+            });
+            elements.cancelRenameTopic.addEventListener('click', () => {
+                elements.renameTopicModal.classList.add('hidden');
+                renameTopicCallback = null;
+            });
+
             elements.settingsBtn.addEventListener('click', () => {
                 elements.settingsModal.classList.remove('hidden');
             });
@@ -949,12 +1179,13 @@
                 saveState();
             });
 
-            elements.autoMemoryToggle.addEventListener('change', () => {
-                appState.settings.autoMemory = elements.autoMemoryToggle.checked;
-                const chat = appState.chats[appState.activeChatId];
-                if (chat) {
-                    chat.isAutoMemory = appState.settings.autoMemory;
-                }
+            elements.autoMemoryGlobalToggle.addEventListener('change', () => {
+                appState.settings.autoMemoryGlobal = elements.autoMemoryGlobalToggle.checked;
+                saveState();
+            });
+
+            elements.autoMemoryChatToggle.addEventListener('change', () => {
+                appState.settings.autoMemoryChat = elements.autoMemoryChatToggle.checked;
                 saveState();
             });
 
@@ -965,6 +1196,9 @@
 
             elements.viewMemoryBtn.addEventListener('click', () => switchView('memory'));
             elements.viewCanvasBtn.addEventListener('click', () => switchView('canvas'));
+            
+            elements.viewGlobalMemoryBtn.addEventListener('click', () => switchMemoryView('global'));
+            elements.viewChatMemoryBtn.addEventListener('click', () => switchMemoryView('chat'));
             
             elements.closeRightPanelBtn.addEventListener('click', () => {
                 elements.rightPanelContainer.classList.add('right-panel-collapsed');
@@ -1019,6 +1253,9 @@
                 elements.expandChatListBtn.classList.add('panel-hidden');
             });
 
+            // Inicializar redimensionamento do Canvas
+            initCanvasResizer();
+            
             loadState();
         });
     </script>
