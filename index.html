@@ -35,8 +35,6 @@
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-screen antialiased text-gray-200">
-    <!-- O resto da estrutura do Main Chat e Memory Area permanece o mesmo -->
-    <!-- ... cole o corpo (body) da versão anterior aqui para economizar espaço ... -->
      <!-- Main Chat Area -->
     <div class="flex flex-col flex-auto h-full p-4 md:p-6">
         <div class="flex flex-col flex-auto flex-shrink-0 rounded-2xl bg-[var(--bg-secondary)] h-full p-4 shadow-2xl">
@@ -73,37 +71,60 @@
     <!-- Modals -->
     <div id="memoryModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden"><div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200"><h3 class="text-lg font-bold mb-4">Salvar Memória Manual</h3><textarea id="memoryText" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 h-32 mb-4" placeholder="Texto da memória..."></textarea><input type="text" id="memoryTopics" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Tópicos (separados por vírgula)..."><div class="flex justify-end space-x-2"><button id="cancelSave" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button><button id="confirmSave" class="px-4 py-2 bg-green-600 text-white rounded-lg">Salvar</button></div></div></div>
     <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden"><div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200"><h3 class="text-lg font-bold mb-4">Confirmar Ação</h3><p id="confirmMessage" class="mb-4">Você tem certeza?</p><div class="flex justify-end space-x-2"><button id="cancelConfirm" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button><button id="doConfirm" class="px-4 py-2 bg-red-600 text-white rounded-lg">Confirmar</button></div></div></div>
+    
+    <!-- NOVO: Modal de Senha para o Modo Pro -->
+    <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden">
+        <div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200">
+            <h3 class="text-lg font-bold mb-4">Ativar Modo Pro</h3>
+            <p class="text-sm text-gray-400 mb-4">Digite a senha para usar o modelo Pro.</p>
+            <input type="password" id="proPasswordInput" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Senha...">
+            <div class="flex justify-end space-x-2">
+                <button id="cancelPassword" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button>
+                <button id="confirmPassword" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Ativar</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // ESTE ARQUIVO NÃO CONTÉM MAIS NENHUMA SENHA.
         
+        // Seletores de elementos da UI
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
         const proModeBtn = document.getElementById('proModeBtn');
         const mainTitle = document.getElementById('main-title');
         const autoMemoryToggle = document.getElementById('auto-memory-toggle');
-        // ... (resto dos seletores de elementos)
         const chatContainer = document.getElementById('chat-container');
         const memoryContainer = document.getElementById('memory-container');
         const memorySearch = document.getElementById('memorySearch');
         const addMemoryBtn = document.getElementById('addMemoryBtn');
+
+        // Seletores de Modais
         const memoryModal = document.getElementById('memoryModal');
         const memoryText = document.getElementById('memoryText');
         const memoryTopics = document.getElementById('memoryTopics');
         const cancelSave = document.getElementById('cancelSave');
         const confirmSave = document.getElementById('confirmSave');
+
         const confirmModal = document.getElementById('confirmModal');
         const confirmMessage = document.getElementById('confirmMessage');
         const cancelConfirm = document.getElementById('cancelConfirm');
         const doConfirm = document.getElementById('doConfirm');
 
+        const passwordModal = document.getElementById('passwordModal');
+        const proPasswordInput = document.getElementById('proPasswordInput');
+        const cancelPassword = document.getElementById('cancelPassword');
+        const confirmPassword = document.getElementById('confirmPassword');
+
+        // Estado da aplicação
         let memories = JSON.parse(localStorage.getItem('rag_memories_v7')) || [];
         let isProMode = false;
-        let proModeToken = null; // Armazena a senha digitada pelo usuário
+        let proModeToken = null;
         let isAutoMemory = localStorage.getItem('auto_memory_v7') === 'true';
         autoMemoryToggle.checked = isAutoMemory;
         let confirmCallback = null;
 
+        // Função de envio principal
         const handleSend = async () => {
             const query = userInput.value.trim();
             if (!query) return;
@@ -116,7 +137,7 @@
                 const payload = { 
                     prompt: query, 
                     isPro: isProMode, 
-                    proToken: proModeToken, // Envia a senha para o backend verificar
+                    proToken: proModeToken,
                     isAutoMemory: isAutoMemory,
                     memories: memories
                 };
@@ -129,6 +150,10 @@
                 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    // Se o erro for senha incorreta, desativa o modo pro na interface
+                    if (response.status === 401) {
+                        deactivateProMode(true); // true indica que é por falha na senha
+                    }
                     throw new Error(errorData.error || 'Falha na resposta do backend');
                 }
 
@@ -149,33 +174,50 @@
             }
         };
 
-        // --- NOVA LÓGICA DO MODO PRO ---
+        // --- LÓGICA DO MODO PRO (Atualizada para usar o modal) ---
+        function activateProMode(password) {
+            isProMode = true;
+            proModeToken = password;
+            mainTitle.textContent = "Chatbot com Memória (PRO)";
+            proModeBtn.querySelector('svg').classList.remove('text-gray-500');
+            proModeBtn.querySelector('svg').classList.add('text-yellow-400');
+            alert("Modo Pro ativado. A verificação da senha será feita na próxima mensagem.");
+            passwordModal.classList.add('hidden');
+            proPasswordInput.value = '';
+        }
+
+        function deactivateProMode(isError = false) {
+            isProMode = false;
+            proModeToken = null;
+            mainTitle.textContent = "Chatbot com Memória";
+            proModeBtn.querySelector('svg').classList.remove('text-yellow-400');
+            proModeBtn.querySelector('svg').classList.add('text-gray-500');
+            if(!isError) alert("Modo Pro desativado.");
+        }
+
         proModeBtn.addEventListener('click', () => {
             if (isProMode) {
-                // Desativando o modo pro
-                isProMode = false;
-                proModeToken = null;
-                mainTitle.textContent = "Chatbot com Memória";
-                proModeBtn.querySelector('svg').classList.remove('text-yellow-400');
-                proModeBtn.querySelector('svg').classList.add('text-gray-500');
-                alert("Modo Pro desativado.");
+                deactivateProMode();
             } else {
-                // Tentando ativar o modo pro
-                const password = prompt("Digite a senha para ativar o Modo Pro:");
-                if (password) { // Se o usuário digitou algo
-                    isProMode = true; // Ativa o modo, a verificação será feita no backend
-                    proModeToken = password; // Armazena a senha para enviar
-                    mainTitle.textContent = "Chatbot com Memória (PRO)";
-                    proModeBtn.querySelector('svg').classList.remove('text-gray-500');
-                    proModeBtn.querySelector('svg').classList.add('text-yellow-400');
-                    alert("Modo Pro ativado. A verificação será feita na próxima mensagem.");
-                }
-                // Se o usuário cancelou o prompt, não faz nada
+                passwordModal.classList.remove('hidden');
+                proPasswordInput.focus();
+            }
+        });
+
+        confirmPassword.addEventListener('click', () => {
+            const password = proPasswordInput.value;
+            if (password) {
+                activateProMode(password);
             }
         });
         
+        proPasswordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmPassword.click();
+            }
+        });
+
         // O resto do JavaScript (appendMessage, renderMemories, etc.) permanece o mesmo.
-        // Copie e cole o restante do seu bloco <script> aqui para manter a funcionalidade completa.
         const appendMessage = (text, sender, proResponse = false, usedContext = []) => {
             const messageId = `msg-${Date.now()}`;
             const isUser = sender === 'user';
@@ -188,7 +230,7 @@
             const alignment = isUser ? 'items-end' : 'items-start';
             const order = isUser ? 'order-2 items-end' : 'order-2 items-start';
             const avatar = isUser ? `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` : `<img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
-            const saveButtonHTML = isUser ? '' : `<button onclick="openMemoryModal(null, '${text}')" class="mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar na Memória</button>`;
+            const saveButtonHTML = (isUser || !text.trim()) ? '' : `<button onclick="openMemoryModal(null, \`${text.replace(/`/g, '\\`')}\`)" class="mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>`;
             const contextHTML = (usedContext.length > 0 && !isUser) ? `<div class="text-xs text-gray-500 mt-2 border-t border-gray-700 pt-1">Contexto usado: ${usedContext.join(', ')}</div>` : '';
             const messageHTML = `<div class="chat-message"><div class="flex ${alignment}"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 ${order}"><div><div id="${messageId}" class="px-4 py-2 rounded-lg inline-block ${isUser ? 'rounded-br-none' : 'rounded-bl-none'} ${bubbleClass}"><div class="markdown-content">${contentHTML}</div>${contextHTML}</div>${saveButtonHTML}</div></div>${avatar}</div></div>`;
             chatContainer.querySelector('.space-y-4').innerHTML += messageHTML;
@@ -201,16 +243,18 @@
         window.deleteTopic = (topicName) => { memories = memories.filter(mem => !mem.topics.includes(topicName)); renderMemories(); memories.forEach(mem => { mem.topics = mem.topics.filter(t => t !== topicName); }); localStorage.setItem('rag_memories_v7', JSON.stringify(memories)); renderMemories(); };
         const showConfirmationModal = (message, onConfirm) => { confirmMessage.textContent = message; confirmCallback = onConfirm; confirmModal.classList.remove('hidden'); };
         const showLoadingIndicator = (show = true) => { const existing = document.getElementById('loading-indicator'); if(existing) existing.remove(); if(show){ const loadingHTML = `<div id="loading-indicator" class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><span class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai">Pensando...</span></div></div><img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>`; chatContainer.querySelector('.space-y-4').innerHTML += loadingHTML; chatContainer.scrollTop = chatContainer.scrollHeight; } };
+        
         sendButton.addEventListener('click', handleSend);
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
         memorySearch.addEventListener('input', renderMemories);
         addMemoryBtn.addEventListener('click', () => openMemoryModal());
         cancelSave.addEventListener('click', () => memoryModal.classList.add('hidden'));
+        cancelPassword.addEventListener('click', () => { passwordModal.classList.add('hidden'); proPasswordInput.value = ''; });
         cancelConfirm.addEventListener('click', () => { confirmModal.classList.add('hidden'); confirmCallback = null; });
         doConfirm.addEventListener('click', () => { if (confirmCallback) confirmCallback(); confirmModal.classList.add('hidden'); confirmCallback = null; });
         autoMemoryToggle.addEventListener('change', (e) => { isAutoMemory = e.target.checked; localStorage.setItem('auto_memory_v7', isAutoMemory ? 'true' : 'false'); alert(`Memória automática ${isAutoMemory ? 'ativada' : 'desativada'}.`); });
+        
         renderMemories();
     </script>
 </body>
 </html>
-
