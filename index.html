@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot com Acesso Pro (RAG v4)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chat-bubble-user { background-color: #3b82f6; color: white; }
+        .chat-bubble-ai { background-color: #e5e7eb; color: #1f2937; }
+        .chat-bubble-ai-pro { background-color: #fef08a; border: 1px solid #facc15; color: #713f12; }
+        .chat-container::-webkit-scrollbar, .memory-container::-webkit-scrollbar { width: 8px; }
+        .chat-container::-webkit-scrollbar-track, .memory-container::-webkit-scrollbar-track { background: #f1f5f9; }
+        .chat-container::-webkit-scrollbar-thumb, .memory-container::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .modal-overlay { transition: opacity 0.3s ease; }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col md:flex-row h-screen antialiased text-gray-800">
+    <!-- Main Chat Area -->
+    <div class="flex flex-col flex-auto h-full p-6">
+        <div class="flex flex-col flex-auto flex-shrink-0 rounded-2xl bg-white h-full p-4 shadow-lg">
+            <div class="flex flex-col h-full overflow-hidden">
+                <div class="text-center py-2 border-b">
+                    <div class="flex justify-center items-center space-x-2">
+                        <h1 id="main-title" class="text-2xl font-bold">Chatbot com Memória</h1>
+                        <button id="proModeBtn" title="Ativar Modo Pro"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400 hover:text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg></button>
+                    </div>
+                    <p class="text-sm text-gray-500">Salve memórias em tópicos e a IA buscará contexto.</p>
+                </div>
+                <div id="chat-container" class="flex flex-col h-full overflow-y-auto mb-4 chat-container">
+                    <div class="flex flex-col space-y-4 p-3">
+                         <div class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><span class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai">Olá! Por padrão, eu uso o modelo Gemini Flash (rápido). Clique no cadeado acima para ativar o Modo Pro com sua senha.</span></div></div><img src="https://placehold.co/40x40/64748B/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>
+                    </div>
+                </div>
+                <div class="flex flex-row items-center h-16 rounded-xl bg-white w-full px-4">
+                    <div class="flex-grow"><div class="relative w-full"><input type="text" id="userInput" class="flex w-full border rounded-xl focus:outline-none focus:border-indigo-300 pl-4 h-10" placeholder="Digite sua mensagem..."></div></div>
+                    <div class="ml-4"><button id="sendButton" class="flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white px-4 py-2 flex-shrink-0"><span>Enviar</span><span class="ml-2"><svg class="w-4 h-4 transform rotate-45 -mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg></span></button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Memory Area -->
+    <div class="flex flex-col w-full md:w-1/3 h-full p-6">
+        <div class="flex flex-col flex-auto flex-shrink-0 rounded-2xl bg-white h-full p-4 shadow-lg">
+             <div class="text-center py-2 border-b"><h2 class="text-xl font-bold">Base de Memória</h2></div>
+            <div class="p-2 flex space-x-2"><input type="text" id="memorySearch" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Buscar em todas as memórias..."><button id="addMemoryBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Add</button></div>
+            <div id="memory-container" class="flex flex-col h-full overflow-y-auto memory-container"></div>
+        </div>
+    </div>
+
+    <!-- Modal para Salvar Memória -->
+    <div id="memoryModal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-1/3"><h3 class="text-lg font-bold mb-4">Salvar na Memória</h3><textarea id="memoryText" class="w-full border rounded-lg p-2 h-32 mb-4" placeholder="Texto da memória..."></textarea><input type="text" id="memoryTopics" class="w-full border rounded-lg p-2 mb-4" placeholder="Tópicos (separados por vírgula)..."><div class="flex justify-end space-x-2"><button id="cancelSave" class="px-4 py-2 bg-gray-300 rounded-lg">Cancelar</button><button id="confirmSave" class="px-4 py-2 bg-green-500 text-white rounded-lg">Salvar</button></div></div>
+    </div>
+    
+    <script>
+        // --- SENHA PARA O MODO PRO ---
+        // Troque "sua-senha-secreta" pela senha que você quiser.
+        const PRO_PASSWORD = "sua-senha-secreta";
+
+        // --- ELEMENTOS DA UI ---
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatContainer = document.getElementById('chat-container');
+        const memoryContainer = document.getElementById('memory-container');
+        const memorySearch = document.getElementById('memorySearch');
+        const addMemoryBtn = document.getElementById('addMemoryBtn');
+        const modal = document.getElementById('memoryModal');
+        const memoryText = document.getElementById('memoryText');
+        const memoryTopics = document.getElementById('memoryTopics');
+        const cancelSave = document.getElementById('cancelSave');
+        const confirmSave = document.getElementById('confirmSave');
+        const proModeBtn = document.getElementById('proModeBtn');
+        const mainTitle = document.getElementById('main-title');
+
+        // --- ESTADO DA APLICAÇÃO ---
+        let memories = JSON.parse(localStorage.getItem('rag_memories_v4')) || [];
+        let isProMode = false;
+        const CONTEXT_BUDGET_CHARS = 4000;
+
+        // --- FUNÇÕES DE LÓGICA DA API ---
+        const callApi = async (prompt, usePro) => {
+             const payload = { 
+                prompt: prompt,
+                isPro: usePro // Informa ao backend se deve usar o modelo Pro
+            };
+            const response = await fetch('/api/gemini', { // Chama nosso backend seguro
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Falha na resposta do backend');
+            }
+            return await response.json();
+        };
+
+        // --- FUNÇÕES DA INTERFACE (UI) ---
+        const appendMessage = (text, sender, proResponse = false) => {
+            const messageId = `msg-${Date.now()}`;
+            const isUser = sender === 'user';
+            
+            let bubbleClass = 'chat-bubble-ai';
+            if (isUser) {
+                bubbleClass = 'chat-bubble-user';
+            } else if (proResponse) {
+                bubbleClass = 'chat-bubble-ai-pro';
+            }
+
+            const alignment = isUser ? 'items-end' : 'items-start';
+            const order = isUser ? 'order-2 items-end' : 'order-2 items-start';
+            const avatar = isUser ? 
+                `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` : 
+                `<img src="https://placehold.co/40x40/64748B/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
+            
+            const saveButtonHTML = isUser ? '' : `<button onclick="openMemoryModal('${messageId}')" class="mt-2 text-xs bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded-full">Salvar na Memória</button>`;
+
+            const messageHTML = `<div class="chat-message"><div class="flex ${alignment}"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 ${order}"><div><span id="${messageId}" class="px-4 py-2 rounded-lg inline-block ${isUser ? 'rounded-br-none' : 'rounded-bl-none'} ${bubbleClass}">${text}</span>${saveButtonHTML}</div></div>${avatar}</div></div>`;
+            chatContainer.querySelector('.space-y-4').innerHTML += messageHTML;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        };
+
+        const renderMemories = () => {
+            memoryContainer.innerHTML = '';
+            const searchTerm = memorySearch.value.toLowerCase();
+            const filteredMemories = memories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
+            const groupedByTopic = filteredMemories.reduce((acc, mem) => { mem.topics.forEach(topic => { if (!acc[topic]) acc[topic] = []; acc[topic].push(mem); }); return acc; }, {});
+            const sortedTopics = Object.keys(groupedByTopic).sort();
+            if (sortedTopics.length === 0) { memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória encontrada.</div>`; return; }
+            sortedTopics.forEach(topic => {
+                const details = document.createElement('details'); details.className = 'p-2'; details.open = true;
+                const summary = document.createElement('summary'); summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-100 rounded-lg flex justify-between items-center';
+                const topicMemories = groupedByTopic[topic];
+                const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
+                let warningHTML = (totalChars > 5000) ? `<span class="text-yellow-500" title="Tópico grande. Considere dividi-lo.">⚠️</span>` : '';
+                summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span> ${warningHTML}`;
+                const topicContent = document.createElement('div'); topicContent.className = 'pl-4 pt-2';
+                topicMemories.forEach(mem => { const memEl = document.createElement('div'); memEl.className = 'p-3 mb-2 bg-yellow-100 border-l-4 border-yellow-400 rounded-r-lg shadow-sm'; memEl.innerHTML = `<p class="text-sm text-yellow-800">${mem.text}</p><button onclick="deleteMemory('${mem.id}')" class="mt-2 text-xs text-red-600 hover:text-red-800 font-semibold">Excluir</button>`; topicContent.appendChild(memEl); });
+                details.appendChild(summary); details.appendChild(topicContent); memoryContainer.appendChild(details);
+            });
+        };
+        
+        window.openMemoryModal = (messageId = null) => {
+            memoryText.value = messageId ? document.getElementById(messageId).innerText : ''; memoryTopics.value = '';
+            modal.classList.remove('hidden'); confirmSave.onclick = () => saveMemory();
+        };
+        const saveMemory = () => {
+            const text = memoryText.value.trim(); const topics = memoryTopics.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+            if (!text || topics.length === 0) { alert('Texto e tópico são obrigatórios.'); return; }
+            memories.push({ id: `mem-${Date.now()}`, text, topics }); localStorage.setItem('rag_memories_v4', JSON.stringify(memories));
+            renderMemories(); modal.classList.add('hidden');
+        };
+        window.deleteMemory = (memoryId) => {
+            memories = memories.filter(mem => mem.id !== memoryId); localStorage.setItem('rag_memories_v4', JSON.stringify(memories));
+            renderMemories();
+        };
+
+        const findRelevantMemories = async (query) => {
+            if (memories.length === 0) return "";
+            const allTopics = [...new Set(memories.flatMap(m => m.topics))];
+            if (allTopics.length === 0) return "";
+            const topicIdPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${query}"`;
+            let rankedTopics = [];
+            try {
+                const apiResponse = await callApi(topicIdPrompt, false); 
+                const textResponse = apiResponse.candidates[0].content.parts[0].text;
+                rankedTopics = textResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
+            } catch (e) { console.error("Erro ao ranquear tópicos:", e); return ""; }
+            if (rankedTopics.length === 0) return "";
+            let contextMemories = []; let currentChars = 0;
+            for (const topic of rankedTopics) {
+                const memoriesInTopic = memories.filter(mem => mem.topics.includes(topic));
+                for (const memory of memoriesInTopic) {
+                    if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) {
+                        contextMemories.push(memory.text); currentChars += memory.text.length;
+                    } else { break; }
+                }
+                if (currentChars >= CONTEXT_BUDGET_CHARS) break;
+            }
+            if (contextMemories.length === 0) return "";
+            const contextText = contextMemories.join("\n- ");
+            return `Use o seguinte contexto da base de memória:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
+        };
+        
+        const showLoadingIndicator = (show = true) => {
+            const existing = document.getElementById('loading-indicator'); if(existing) existing.remove();
+            if(show){ const loadingHTML = `<div id="loading-indicator" class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><span class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai">Pensando...</span></div></div><img src="https://placehold.co/40x40/64748B/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>`; chatContainer.querySelector('.space-y-4').innerHTML += loadingHTML; chatContainer.scrollTop = chatContainer.scrollHeight; }
+        };
+
+        const handleSend = async () => {
+            const query = userInput.value.trim();
+            if (!query) return;
+            appendMessage(query, 'user');
+            userInput.value = '';
+            showLoadingIndicator();
+            try {
+                const context = await findRelevantMemories(query);
+                const finalPrompt = `${context}Pergunta do usuário: "${query}"\n\nResponda de forma direta e completa.`;
+                const apiResponse = await callApi(finalPrompt, isProMode); 
+                const aiText = apiResponse.candidates[0].content.parts[0].text;
+                showLoadingIndicator(false);
+                appendMessage(aiText, 'ai', isProMode);
+            } catch (error) {
+                console.error("Erro no fluxo de envio:", error);
+                showLoadingIndicator(false);
+                appendMessage(error.message, 'ai');
+            }
+        };
+
+        proModeBtn.addEventListener('click', () => {
+            if (isProMode) {
+                isProMode = false;
+                mainTitle.textContent = "Chatbot com Memória";
+                proModeBtn.querySelector('svg').classList.remove('text-yellow-500');
+                proModeBtn.querySelector('svg').classList.add('text-gray-400');
+                alert("Modo Pro desativado.");
+            } else {
+                const password = prompt("Digite a senha para ativar o Modo Pro:");
+                if (password === PRO_PASSWORD) {
+                    isProMode = true;
+                    mainTitle.textContent = "Chatbot com Memória (PRO)";
+                    proModeBtn.querySelector('svg').classList.remove('text-gray-400');
+                    proModeBtn.querySelector('svg').classList.add('text-yellow-500');
+                    alert("Modo Pro ativado!");
+                } else if (password) { 
+                    alert("Senha incorreta.");
+                }
+            }
+        });
+
+        sendButton.addEventListener('click', handleSend);
+        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+        memorySearch.addEventListener('input', renderMemories);
+        addMemoryBtn.addEventListener('click', () => openMemoryModal());
+        cancelSave.addEventListener('click', () => modal.classList.add('hidden'));
+        renderMemories();
+    </script>
+</body>
+</html>
