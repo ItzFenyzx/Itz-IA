@@ -47,7 +47,7 @@
                 </div>
                 <div id="chat-container" class="flex flex-col h-full overflow-y-auto mb-4 custom-scrollbar">
                     <div class="flex flex-col space-y-4 p-3">
-                         <div class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><div class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai"><div class="markdown-content"><p>Olá! Esta é a v7.1 (corrigida). O erro da interface foi consertado.</p></div></div></div></div><img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>
+                         <div class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><div class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai"><div class="markdown-content"><p>Olá! Esta é a v7.2 (corrigida). O erro de segurança na ativação do Modo Pro foi consertado.</p></div></div></div></div><img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>
                     </div>
                 </div>
                 <div class="flex flex-row items-center h-16 rounded-xl bg-[var(--bg-secondary)] w-full px-4">
@@ -71,7 +71,19 @@
     <!-- Modals -->
     <div id="memoryModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden"><div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200"><h3 class="text-lg font-bold mb-4">Salvar Memória Manual</h3><textarea id="memoryText" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 h-32 mb-4" placeholder="Texto da memória..."></textarea><input type="text" id="memoryTopics" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Tópicos (separados por vírgula)..."><div class="flex justify-end space-x-2"><button id="cancelSave" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button><button id="confirmSave" class="px-4 py-2 bg-green-600 text-white rounded-lg">Salvar</button></div></div></div>
     <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden"><div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200"><h3 class="text-lg font-bold mb-4">Confirmar Ação</h3><p id="confirmMessage" class="mb-4">Você tem certeza?</p><div class="flex justify-end space-x-2"><button id="cancelConfirm" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button><button id="doConfirm" class="px-4 py-2 bg-red-600 text-white rounded-lg">Confirmar</button></div></div></div>
-    <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden"><div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200"><h3 class="text-lg font-bold mb-4">Ativar Modo Pro</h3><p class="text-sm text-gray-400 mb-4">Digite a senha para usar o modelo Pro.</p><input type="password" id="proPasswordInput" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Senha..."><div class="flex justify-end space-x-2"><button id="cancelPassword" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button><button id="confirmPassword" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Ativar</button></div></div></div>
+    
+    <!-- NOVO: Modal de Senha para o Modo Pro -->
+    <div id="passwordModal" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center hidden">
+        <div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200">
+            <h3 class="text-lg font-bold mb-4">Ativar Modo Pro</h3>
+            <p class="text-sm text-gray-400 mb-4">Digite a senha para usar o modelo Pro.</p>
+            <input type="password" id="proPasswordInput" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Senha...">
+            <div class="flex justify-end space-x-2">
+                <button id="cancelPassword" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button>
+                <button id="confirmPassword" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Ativar</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // ESTE ARQUIVO NÃO CONTÉM MAIS NENHUMA SENHA.
@@ -139,6 +151,10 @@
                     }
                     throw new Error(errorData.error || 'Falha na resposta do backend');
                 }
+                
+                if (isProMode) {
+                    setProUI();
+                }
 
                 const result = await response.json();
                 showLoadingIndicator(false);
@@ -156,7 +172,6 @@
             }
         };
 
-        // --- CÓDIGO CORRIGIDO - APENAS UMA FUNÇÃO appendMessage ---
         const appendMessage = (text, sender, proResponse = false, usedContext = []) => {
             const messageId = `msg-${Date.now()}`;
             const isUser = sender === 'user';
@@ -170,8 +185,7 @@
             const order = isUser ? 'order-2 items-end' : 'order-2 items-start';
             const avatar = isUser ? `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` : `<img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
             
-            // Lógica robusta para o botão de salvar, usando o ID da mensagem
-            const saveButtonHTML = (isUser || !text.trim()) ? '' : `<button onclick="openMemoryModal('${messageId}')" class="mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>`;
+            const saveButtonHTML = (isUser || !text.trim()) ? '' : `<button onclick="openMemoryModal(null, \`${text.replace(/`/g, '\\`')}\`)" class="mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>`;
             
             const contextHTML = (usedContext.length > 0 && !isUser) ? `<div class="text-xs text-gray-500 mt-2 border-t border-gray-700 pt-1">Contexto usado: ${usedContext.join(', ')}</div>` : '';
             
@@ -183,29 +197,54 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         };
 
-        window.openMemoryModal = (messageId, rawText = null) => {
-            // Se um ID for passado, pega o texto original (não formatado)
-            // Se rawText for passado (do botão de salvar), usa ele
-            let textToSave = rawText;
-            if (messageId) {
-                 const el = document.getElementById(messageId);
-                 if(el) textToSave = el.querySelector('.markdown-content').innerText;
-            }
-            memoryText.value = textToSave || '';
-            memoryTopics.value = '';
-            memoryModal.classList.remove('hidden');
-            confirmSave.onclick = () => saveMemory();
-        };
+        // LÓGICA DO MODO PRO (Atualizada para usar o modal)
+        function setProUI() {
+            mainTitle.textContent = "Chatbot com Memória (PRO)";
+            proModeBtn.querySelector('svg').classList.remove('text-gray-500');
+            proModeBtn.querySelector('svg').classList.add('text-yellow-400');
+        }
 
-        // ... o resto do seu JS continua aqui ...
+        function deactivateProMode(isError = false) {
+            isProMode = false;
+            proModeToken = null;
+            mainTitle.textContent = "Chatbot com Memória";
+            proModeBtn.querySelector('svg').classList.remove('text-yellow-400');
+            proModeBtn.querySelector('svg').classList.add('text-gray-500');
+            if (isError) {
+                alert("Senha incorreta. Voltando ao modo padrão.");
+            } else {
+                alert("Modo Pro desativado.");
+            }
+        }
+        
+        proModeBtn.addEventListener('click', () => {
+            if (isProMode) {
+                deactivateProMode();
+            } else {
+                passwordModal.classList.remove('hidden');
+                proPasswordInput.value = '';
+                proPasswordInput.focus();
+            }
+        });
+
+        confirmPassword.addEventListener('click', () => {
+            const password = proPasswordInput.value;
+            if (password) {
+                isProMode = true;
+                proModeToken = password;
+                passwordModal.classList.add('hidden');
+                alert("Modo Pro selecionado. A ativação ocorrerá na sua próxima mensagem.");
+            }
+        });
+        
+        // --- EVENT LISTENERS E INICIALIZAÇÃO ---
+        window.openMemoryModal = (messageId, rawText = null) => { let textToSave = rawText; if (messageId) { const el = document.getElementById(messageId); if(el) textToSave = el.querySelector('.markdown-content').innerText; } memoryText.value = textToSave || ''; memoryTopics.value = ''; memoryModal.classList.remove('hidden'); confirmSave.onclick = () => saveMemory(); };
         const renderMemories = () => { memoryContainer.innerHTML = ''; const searchTerm = memorySearch.value.toLowerCase(); const filteredMemories = memories.filter(mem => mem.text.toLowerCase().includes(searchTerm)); const groupedByTopic = filteredMemories.reduce((acc, mem) => { mem.topics.forEach(topic => { if (!acc[topic]) acc[topic] = []; acc[topic].push(mem); }); return acc; }, {}); const sortedTopics = Object.keys(groupedByTopic).sort(); if (sortedTopics.length === 0) { memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória salva.</div>`; return; } sortedTopics.forEach(topic => { const details = document.createElement('details'); details.className = 'p-2'; details.open = searchTerm.length > 0; const summary = document.createElement('summary'); summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center'; const topicMemories = groupedByTopic[topic]; const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0); let warningHTML = (totalChars > 5000) ? `<span class="text-yellow-400" title="Tópico grande. Considere dividi-lo.">⚠️</span>` : ''; summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span> <div class="flex items-center space-x-2">${warningHTML}<button onclick="event.stopPropagation(); showConfirmationModal('Tem certeza que deseja apagar o tópico \\'${topic}\\' e todas as suas memórias?', () => deleteTopic('${topic}'))" class="text-red-500 hover:text-red-400 text-xs">Apagar Tópico</button></div>`; const topicContent = document.createElement('div'); topicContent.className = 'pl-4 pt-2'; topicMemories.forEach(mem => { const memEl = document.createElement('div'); memEl.className = 'p-3 mb-2 bg-gray-800 border-l-4 border-yellow-500 rounded-r-lg shadow-sm'; memEl.innerHTML = `<p class="text-sm text-gray-300">${mem.text}</p><button onclick="showConfirmationModal('Tem certeza que deseja apagar esta memória?', () => deleteMemory('${mem.id}'))" class="mt-2 text-xs text-red-500 hover:text-red-400 font-semibold">Excluir</button>`; topicContent.appendChild(memEl); }); details.appendChild(summary); details.appendChild(topicContent); memoryContainer.appendChild(details); }); };
         const saveMemory = () => { const text = memoryText.value.trim(); const topics = memoryTopics.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean); if (!text || topics.length === 0) { alert('Texto e tópico são obrigatórios.'); return; } memories.push({ id: `mem-${Date.now()}`, text, topics }); localStorage.setItem('rag_memories_v7', JSON.stringify(memories)); renderMemories(); memoryModal.classList.add('hidden'); };
         window.deleteMemory = (memoryId) => { memories = memories.filter(mem => mem.id !== memoryId); localStorage.setItem('rag_memories_v7', JSON.stringify(memories)); renderMemories(); };
         window.deleteTopic = (topicName) => { memories = memories.filter(mem => !mem.topics.includes(topicName)); renderMemories(); memories.forEach(mem => { mem.topics = mem.topics.filter(t => t !== topicName); }); localStorage.setItem('rag_memories_v7', JSON.stringify(memories)); renderMemories(); };
         const showConfirmationModal = (message, onConfirm) => { confirmMessage.textContent = message; confirmCallback = onConfirm; confirmModal.classList.remove('hidden'); };
         const showLoadingIndicator = (show = true) => { const existing = document.getElementById('loading-indicator'); if(existing) existing.remove(); if(show){ const loadingHTML = `<div id="loading-indicator" class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><span class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai">Pensando...</span></div></div><img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>`; chatContainer.querySelector('.space-y-4').innerHTML += loadingHTML; chatContainer.scrollTop = chatContainer.scrollHeight; } };
-        function activateProMode(password) { isProMode = true; proModeToken = password; mainTitle.textContent = "Chatbot com Memória (PRO)"; proModeBtn.querySelector('svg').classList.remove('text-gray-500'); proModeBtn.querySelector('svg').classList.add('text-yellow-400'); alert("Modo Pro ativado. A verificação da senha será feita na próxima mensagem."); passwordModal.classList.add('hidden'); proPasswordInput.value = ''; }
-        function deactivateProMode(isError = false) { isProMode = false; proModeToken = null; mainTitle.textContent = "Chatbot com Memória"; proModeBtn.querySelector('svg').classList.remove('text-yellow-400'); proModeBtn.querySelector('svg').classList.add('text-gray-500'); if(!isError) alert("Modo Pro desativado."); }
         
         sendButton.addEventListener('click', handleSend);
         userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
@@ -216,11 +255,10 @@
         cancelConfirm.addEventListener('click', () => { confirmModal.classList.add('hidden'); confirmCallback = null; });
         doConfirm.addEventListener('click', () => { if (confirmCallback) confirmCallback(); confirmModal.classList.add('hidden'); confirmCallback = null; });
         autoMemoryToggle.addEventListener('change', (e) => { isAutoMemory = e.target.checked; localStorage.setItem('auto_memory_v7', isAutoMemory ? 'true' : 'false'); alert(`Memória automática ${isAutoMemory ? 'ativada' : 'desativada'}.`); });
-        proModeBtn.addEventListener('click', () => { if (isProMode) { deactivateProMode(); } else { passwordModal.classList.remove('hidden'); proPasswordInput.focus(); } });
-        confirmPassword.addEventListener('click', () => { const password = proPasswordInput.value; if (password) { activateProMode(password); } });
         proPasswordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { confirmPassword.click(); } });
-
+        
         renderMemories();
     </script>
 </body>
 </html>
+
