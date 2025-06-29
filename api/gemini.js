@@ -1,18 +1,36 @@
 // ==================================================================
-//  Backend para Phoenix Chat v8 (Vercel Serverless Function)
+//  Backend para Phoenix Chat - Versão Final
 //  Arquivo: /api/gemini.js
 //
-//  Implementa a arquitetura final com um sistema de ações para
-//  separar a verificação de senha da lógica de chat.
+//  Implementa a arquitetura final com:
+//  - Gestão de múltiplos chats (implícito no frontend)
+//  - Análise de Imagem (multimodal)
+//  - Memórias Base (Identidade da IA)
+//  - Correção de bug do Modo Pro
+//  - Toda a lógica anterior (Persona, RAG, etc.)
 // ==================================================================
 
-const CONTEXT_BUDGET_CHARS = 4000;
+const CONTEXT_BUDGET_CHARS = 3500; // Orçamento de caracteres para o contexto de memória
+const CREATION_DATE = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+// --- MEMÓRIAS BASE DA IA ---
+// Este contexto é sempre adicionado para dar identidade à IA.
+const BASE_MEMORY_CONTEXT = `
+Você é o "Phoenix Chat", uma IA de conversação avançada.
+- Seu criador é Arthur Nascimento Nogueira.
+- Você foi criado em ${CREATION_DATE}.
+- Você é baseado na tecnologia Gemini do Google.
+- Seu nome pode ser alterado pelo usuário se ele desejar.
+- Responda sempre de forma útil, completa e seguindo a persona de especialista solicitada.
+`;
 
 // Função auxiliar para chamar a API do Gemini
-async function callGemini(prompt, apiKey, model) {
+async function callGemini(parts, apiKey, model) {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  
+  // O payload agora aceita um array de 'parts' para suportar texto e imagem.
   const payload = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts: parts }],
     safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -37,7 +55,7 @@ async function callGemini(prompt, apiKey, model) {
   }
 
   const data = await geminiResponse.json();
-  if (data.candidates && data.candidates[0]?.content.parts[0]?.text) {
+  if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
     return data.candidates[0].content.parts[0].text;
   }
   if (data.promptFeedback?.blockReason) {
@@ -53,30 +71,22 @@ export default async function handler(request, response) {
     return response.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // O corpo agora contém um campo 'action' para decidir o que fazer.
   const { action } = request.body;
   const correctPassword = process.env.PRO_MODE_PASSWORD;
 
-  // --- ROTEADOR DE AÇÕES ---
+  // Roteador de Ações
   if (action === 'verifyPassword') {
-    // Ação específica para verificar a senha.
     const { token } = request.body;
     if (!correctPassword) {
       return response.status(500).json({ success: false, error: 'Senha do Modo Pro não configurada no servidor.' });
     }
-    if (token === correctPassword) {
-      return response.status(200).json({ success: true });
-    } else {
-      return response.status(200).json({ success: false });
-    }
+    return response.status(200).json({ success: token === correctPassword });
   } 
   else if (action === 'chat') {
-    // Ação padrão para processar uma pergunta do chat.
     try {
       const chatResponse = await handleChatRequest(request.body);
       return response.status(200).json(chatResponse);
     } catch (error) {
-       // A função handleChatRequest já lida com os seus próprios erros, mas adicionamos um catch-all.
       return response.status(error.statusCode || 500).json({ error: error.message });
     }
   } 
@@ -87,10 +97,10 @@ export default async function handler(request, response) {
 
 // Função dedicada para lidar com a lógica do chat
 async function handleChatRequest(body) {
-  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories } = body;
+  const { prompt: userQuery, isPro, proToken, isAutoMemory, memories, image } = body;
 
-  if (!userQuery) {
-    throw { statusCode: 400, message: 'Nenhum prompt foi fornecido.' };
+  if (!userQuery && !image) {
+    throw { statusCode: 400, message: 'Nenhum prompt ou imagem foi fornecido.' };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -104,15 +114,26 @@ async function handleChatRequest(body) {
   const proModel = 'gemini-1.5-pro-latest';
   
   if (isPro) {
-    if (!correctPassword) {
-      throw { statusCode: 500, message: 'Senha do Modo Pro não configurada no servidor.' };
-    }
-    if (proToken !== correctPassword) {
-      throw { statusCode: 401, message: 'Senha do Modo Pro incorreta.' };
-    }
+    if (!correctPassword) throw { statusCode: 500, message: 'Senha do Modo Pro não configurada no servidor.' };
+    if (proToken !== correctPassword) throw { statusCode: 401, message: 'Senha do Modo Pro incorreta.' };
     modelForFinalAnswer = proModel;
   } else {
     modelForFinalAnswer = fastModel;
+  }
+
+  // --- MONTAGEM DAS 'PARTS' DO PROMPT (SUPORTE MULTIMODAL) ---
+  const promptParts = [];
+  if (userQuery) {
+      promptParts.push({ text: userQuery });
+  }
+  if (image) {
+      // A imagem vem como uma string base64 do frontend
+      promptParts.push({
+          inline_data: {
+              mime_type: image.mimeType,
+              data: image.data
+          }
+      });
   }
 
   // --- LÓGICA DE CONTEXTO (RAG) ---
@@ -122,8 +143,9 @@ async function handleChatRequest(body) {
       const allTopics = [...new Set(memories.flatMap(m => m.topics))];
       if (allTopics.length > 0) {
           const topicRankPrompt = `Analise a pergunta e identifique os tópicos mais relevantes da lista. Responda APENAS com os tópicos, EM ORDEM, separados por vírgula.\nTópicos: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-          const rankedTopicsResponse = await callGemini(topicRankPrompt, apiKey, fastModel);
+          const rankedTopicsResponse = await callGemini([{text: topicRankPrompt}], apiKey, fastModel);
           const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
+          
           if (rankedTopics.length > 0) {
               usedContextTopics = rankedTopics;
               let contextMemories = []; let currentChars = 0;
@@ -144,20 +166,31 @@ async function handleChatRequest(body) {
 
   // --- LÓGICA DE PERSONA DINÂMICA ---
   const personaDefinitionPrompt = `Analise a seguinte pergunta do usuário. Descreva a persona de especialista ideal para responder. Seja conciso e direto. Exemplos: "Doutor em Física Quântica", "Crítico de Cinema especializado em filmes noir", "Engenheiro de Software Sênior especialista em Python". Pergunta: "${userQuery}"`;
-  const persona = await callGemini(personaDefinitionPrompt, apiKey, fastModel);
+  const persona = await callGemini([{text: personaDefinitionPrompt}], apiKey, fastModel);
 
   // --- MONTAGEM DO PROMPT FINAL ---
-  const finalPrompt = `Assuma a persona de um(a) **${persona.trim()}**. ${contextPrompt}Responda à pergunta do usuário de forma completa, profunda e com o estilo apropriado para essa persona, usando Markdown para formatação (títulos, listas, etc.). Se o contexto fornecido não for relevante, ignore-o e responda de forma natural com base no seu conhecimento geral.\n\nPergunta do usuário: "${userQuery}"`;
+  const finalSystemPrompt = `
+    ${BASE_MEMORY_CONTEXT}
+    Assuma a persona de um(a) **${persona.trim()}**. 
+    ${contextPrompt}
+    Responda à pergunta do usuário de forma completa, profunda e com o estilo apropriado para essa persona, usando Markdown para formatação (títulos, listas, etc.). 
+    Se o contexto da memória não for relevante para a pergunta, ignore-o e responda de forma natural com base no seu conhecimento geral.
+    ---
+    PERGUNTA DO USUÁRIO:
+  `;
+
+  // Adiciona o prompt do sistema no início do array de 'parts'
+  const finalPromptParts = [{ text: finalSystemPrompt }, ...promptParts];
   
   // --- GERAÇÃO DA RESPOSTA PRINCIPAL ---
-  const finalAiResponse = await callGemini(finalPrompt, apiKey, modelForFinalAnswer);
+  const finalAiResponse = await callGemini(finalPromptParts, apiKey, modelForFinalAnswer);
 
   // --- LÓGICA DE MEMÓRIA AUTOMÁTICA ---
   let newMemory = null;
   if (isAutoMemory) {
       try {
           const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery}"\n\nRESPOSTA: "${finalAiResponse}"`;
-          const autoMemoryResponse = await callGemini(autoMemoryPrompt, apiKey, fastModel);
+          const autoMemoryResponse = await callGemini([{text: autoMemoryPrompt}], apiKey, fastModel);
           if(autoMemoryResponse.trim().startsWith('{')) {
               const parsedMemory = JSON.parse(autoMemoryResponse);
               if (parsedMemory.text && parsedMemory.topics) {
