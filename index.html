@@ -1612,7 +1612,7 @@
                     document.documentElement.classList.add('dark'); // Corrigido para document.documentElement
                     elements.themeToggle.checked = true;
                 } else {
-                    elements.body.classList.remove('dark');
+                    document.documentElement.classList.remove('dark');
                     elements.themeToggle.checked = false;
                 }
                 elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
