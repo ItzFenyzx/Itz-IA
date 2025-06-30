@@ -1,5 +1,5 @@
-const CONTEXT_BUDGET_CHARS = 30000;
-const MAX_MEMORY_CHARS = 5000;
+const CONTEXT_BUDGET_CHARS = 25000;
+const MAX_MEMORY_CHARS = 3000;
 
 export default async function handler(req, res) {
     // CORS headers
@@ -45,11 +45,11 @@ export default async function handler(req, res) {
             }
         }
 
-        // Selecionar modelo
+        // Selecionar modelo - SIMPLIFICADO
         const model = isPro ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
         const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-        // Construir contexto de memórias
+        // Construir contexto de memórias - OTIMIZADO
         let memoryContext = '';
         let usedContext = [];
         
@@ -57,29 +57,50 @@ export default async function handler(req, res) {
             const relevantMemories = selectRelevantMemories(memories, prompt);
             if (relevantMemories.length > 0) {
                 memoryContext = formatMemoriesForContext(relevantMemories);
-                usedContext = relevantMemories.map(mem => mem.topics ? mem.topics.join(', ') : 'Sem tópico');
+                usedContext = relevantMemories.map(mem => mem.topics ? mem.topics.slice(0, 2).join(', ') : 'Geral');
             }
         }
 
-        // Construir Mega Prompt
-        const megaPrompt = buildMegaPrompt({
+        // Construir Mega Prompt SIMPLIFICADO
+        const megaPrompt = buildSimplifiedMegaPrompt({
             prompt,
             memoryContext,
             useDynamicPersona,
             isPro
         });
 
-        // Preparar payload para o Gemini
+        // Preparar payload para o Gemini - OTIMIZADO
         const geminiPayload = {
             contents: [{
-                parts: []
-            }]
+                parts: [{
+                    text: megaPrompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: isPro ? 8192 : 4096,
+            },
+            safetySettings: [
+                {
+                    category: "HARM_CATEGORY_HARASSMENT",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    category: "HARM_CATEGORY_HATE_SPEECH",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                }
+            ]
         };
-
-        // Adicionar texto
-        geminiPayload.contents[0].parts.push({
-            text: megaPrompt
-        });
 
         // Adicionar imagem se fornecida
         if (image) {
@@ -102,22 +123,29 @@ export default async function handler(req, res) {
 
         if (!response.ok) {
             const errorData = await response.text();
-            console.error('Erro da API Gemini:', errorData);
+            console.error('Erro da API Gemini:', response.status, errorData);
             
             if (response.status === 429) {
                 return res.status(429).json({ 
-                    error: 'Limite de requisições atingido. Tente novamente em alguns segundos.' 
+                    error: 'Muitas requisições. Aguarde alguns segundos e tente novamente.' 
+                });
+            }
+            
+            if (response.status === 400) {
+                return res.status(400).json({ 
+                    error: 'Requisição inválida. Verifique o conteúdo da mensagem.' 
                 });
             }
             
             return res.status(500).json({ 
-                error: `Erro da API Gemini: ${response.status} - ${errorData}` 
+                error: `Erro da API: ${response.status}` 
             });
         }
 
         const result = await response.json();
         
         if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+            console.error('Resposta inválida da API:', result);
             return res.status(500).json({ error: 'Resposta inválida da API Gemini' });
         }
 
@@ -126,9 +154,9 @@ export default async function handler(req, res) {
         // Processar resposta para separar chat e canvas
         const { aiResponse, canvasContent } = processResponse(fullResponse);
 
-        // Gerar memória automática se ativada
+        // Gerar memória automática se ativada - APENAS UMA CHAMADA ADICIONAL SE NECESSÁRIO
         let newMemory = null;
-        if (isAutoMemory && aiResponse.trim()) {
+        if (isAutoMemory && aiResponse.trim() && aiResponse.length > 50) {
             try {
                 newMemory = await generateAutoMemory(prompt, aiResponse, apiKey);
             } catch (error) {
@@ -152,61 +180,36 @@ export default async function handler(req, res) {
     }
 }
 
-function buildMegaPrompt({ prompt, memoryContext, useDynamicPersona, isPro }) {
-    let megaPrompt = `### INSTRUÇÕES DE SISTEMA ###
-Você é um assistente de IA avançado. Siga rigorosamente todas as regras abaixo numa única resposta.
+function buildSimplifiedMegaPrompt({ prompt, memoryContext, useDynamicPersona, isPro }) {
+    let megaPrompt = `Você é o Phoenix Chat, um assistente de IA avançado criado por Arthur Nascimento Nogueira.
 
-1. **IDENTIDADE BASE (Sempre Presente):**
-   - Você é o "Phoenix Chat".
-   - Seu criador é Arthur Nascimento Nogueira.
-   - Sua data de criação é ${new Date().toLocaleDateString('pt-BR')}.
-   - Sua tecnologia é baseada no Gemini do Google, com os devidos créditos.
-   - IMPORTANTE: Só mencione essas informações se for EXPLICITAMENTE perguntado sobre elas.
-
-2. **MODO DE OPERAÇÃO:**`;
+INSTRUÇÕES:
+1. Responda de forma direta e focada na pergunta do usuário.
+2. Não mencione sua identidade ou criador a menos que seja perguntado explicitamente.`;
 
     if (useDynamicPersona) {
         megaPrompt += `
-   - Analise a pergunta do usuário para definir a persona de especialista mais adequada para responder.
-   - Adote essa persona para formular sua resposta de forma natural e direta.
-   - NÃO se apresente como "Olá, sou um profissional..." - apenas responda no estilo da persona.`;
+3. Analise a pergunta e adote a expertise mais adequada para responder (ex: programador, médico, professor).
+4. Responda no estilo dessa expertise, mas sem se apresentar formalmente.`;
     } else {
         megaPrompt += `
-   - Aja como um doutor em todos os aspectos do conhecimento, um polímata com acesso a toda a informação humana.
-   - Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
+3. Responda como um especialista polímata com conhecimento profundo em todas as áreas.`;
     }
 
     if (memoryContext) {
         megaPrompt += `
 
-3. **ANÁLISE DE CONTEXTO:**
-   - Analise o contexto da Base de Memória abaixo.
-   - Utilize estas informações para enriquecer sua resposta APENAS se forem diretamente relevantes.
-   - Se não forem relevantes, ignore-as e responda com base no seu conhecimento geral.
-   
-   --- CONTEXTO ---
+CONTEXTO RELEVANTE:
 ${memoryContext}
-   --- FIM DO CONTEXTO ---`;
+
+Use este contexto apenas se for diretamente relevante para a pergunta.`;
     }
 
     megaPrompt += `
 
-4. **GERAÇÃO DE CANVAS (Instrução Permanente):**
-   - Se sua resposta contiver código, scripts, documentos técnicos, ou conteúdo que seria melhor apresentado em formato de documento, estruture essa parte dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS].
-   - O texto fora dessas tags deve servir como uma breve introdução ou resumo para o chat.
-   - Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.
-   - Para códigos, inclua comentários explicativos e números de linha quando apropriado.
+CANVAS: Se sua resposta contiver código, scripts, documentos técnicos ou conteúdo longo que seria melhor em formato de documento, coloque essa parte entre [CANVAS_BEGINS] e [CANVAS_ENDS].
 
-5. **FOCO E PRECISÃO:**
-   - Concentre-se estritamente no que foi perguntado.
-   - Evite informações adicionais não solicitadas.
-   - Seja direto e objetivo na resposta.
-
-6. **TAREFA FINAL:**
-   - Com base em todas as regras acima, responda agora à pergunta do usuário.
-
-### PERGUNTA DO USUÁRIO ###
-${prompt}`;
+PERGUNTA: ${prompt}`;
 
     return megaPrompt;
 }
@@ -218,26 +221,25 @@ function selectRelevantMemories(memories, prompt) {
     const relevantMemories = [];
     let totalChars = 0;
     
-    // Ordenar por relevância (busca por palavras-chave nos tópicos e texto)
+    // Ordenar por relevância simples
     const scoredMemories = memories.map(memory => {
         let score = 0;
         const memoryText = memory.text.toLowerCase();
         const memoryTopics = (memory.topics || []).join(' ').toLowerCase();
         
-        // Pontuação por palavras-chave nos tópicos
-        const promptWords = promptLower.split(/\s+/);
+        // Pontuação básica por palavras-chave
+        const promptWords = promptLower.split(/\s+/).filter(word => word.length > 3);
         promptWords.forEach(word => {
-            if (word.length > 3) {
-                if (memoryTopics.includes(word)) score += 3;
-                if (memoryText.includes(word)) score += 1;
-            }
+            if (memoryTopics.includes(word)) score += 2;
+            if (memoryText.includes(word)) score += 1;
         });
         
         return { memory, score };
     }).filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5); // Máximo 5 memórias
     
-    // Selecionar memórias até o limite de caracteres
+    // Selecionar memórias até o limite
     for (const item of scoredMemories) {
         const memorySize = item.memory.text.length;
         if (totalChars + memorySize <= MAX_MEMORY_CHARS) {
@@ -253,8 +255,8 @@ function selectRelevantMemories(memories, prompt) {
 
 function formatMemoriesForContext(memories) {
     return memories.map(memory => {
-        const topics = memory.topics ? memory.topics.join(', ') : 'Geral';
-        return `[${topics}]: ${memory.text}`;
+        const topics = memory.topics ? memory.topics.slice(0, 2).join(', ') : 'Geral';
+        return `[${topics}]: ${memory.text.substring(0, 300)}`;
     }).join('\n\n');
 }
 
@@ -280,18 +282,12 @@ function processResponse(fullResponse) {
 
 async function generateAutoMemory(userPrompt, aiResponse, apiKey) {
     try {
-        const memoryPrompt = `Analise a seguinte conversa e gere um resumo estruturado para memória:
+        // Prompt muito mais simples e direto
+        const memoryPrompt = `Resuma esta conversa em JSON:
+PERGUNTA: ${userPrompt.substring(0, 200)}
+RESPOSTA: ${aiResponse.substring(0, 300)}
 
-PERGUNTA: ${userPrompt}
-RESPOSTA: ${aiResponse}
-
-Gere um objeto JSON com:
-- "text": resumo conciso do assunto principal (máximo 200 caracteres)
-- "topics": array com 1-3 palavras-chave relevantes (em minúsculas)
-
-Exemplo: {"text": "Usuário perguntou sobre X e foi explicado Y", "topics": ["palavra1", "palavra2"]}
-
-Responda APENAS com o JSON válido:`;
+Formato: {"text": "resumo em 1 frase", "topics": ["palavra1", "palavra2"]}`;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
             method: 'POST',
@@ -299,33 +295,36 @@ Responda APENAS com o JSON válido:`;
             body: JSON.stringify({
                 contents: [{
                     parts: [{ text: memoryPrompt }]
-                }]
+                }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 200
+                }
             })
         });
 
         if (!response.ok) {
-            throw new Error('Falha ao gerar memória automática');
+            throw new Error(`HTTP ${response.status}`);
         }
 
         const result = await response.json();
         const memoryText = result.candidates[0].content.parts[0].text.trim();
         
-        // Tentar extrair JSON da resposta
-        const jsonMatch = memoryText.match(/\{[\s\S]*\}/);
+        // Extrair JSON
+        const jsonMatch = memoryText.match(/\{[^}]+\}/);
         if (jsonMatch) {
             const memoryData = JSON.parse(jsonMatch[0]);
             return {
                 id: `mem-auto-${Date.now()}`,
-                text: memoryData.text,
-                topics: memoryData.topics || ['geral']
+                text: memoryData.text || 'Conversa resumida',
+                topics: Array.isArray(memoryData.topics) ? memoryData.topics.slice(0, 3) : ['geral']
             };
         }
         
-        throw new Error('Formato de memória inválido');
+        throw new Error('JSON não encontrado');
         
     } catch (error) {
         console.error('Erro ao gerar memória automática:', error);
         return null;
     }
 }
-
