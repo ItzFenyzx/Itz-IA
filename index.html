@@ -864,8 +864,6 @@
             let renameCallback = null;
             let renameTopicCallback = null;
             let isResizing = false;
-            let isAiTyping = false;
-            let abortController = null;
 
             // Funcionalidade de redimensionamento do Canvas
             const initCanvasResizer = () => {
@@ -908,11 +906,11 @@
 
             const saveState = () => {
                 const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v23', JSON.stringify(stateToSave));
+                localStorage.setItem('phoenixChatState_v22', JSON.stringify(stateToSave));
             };
 
             const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v23');
+                const savedState = localStorage.getItem('phoenixChatState_v22');
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
                     parsedState.settings = { ...appState.settings, ...parsedState.settings };
@@ -1204,13 +1202,10 @@
             };
 
             const renderMemories = () => {
-                const chatMemories = appState.chats[appState.activeChatId] ? appState.chats[appState.activeChatId].memories : [];
-                const globalMemories = appState.globalMemories;
-                const isGlobalView = appState.activeMemoryView === 'global';
+                const memories = getCurrentMemories();
+                const isGlobal = appState.activeMemoryView === 'global';
                 
-                const memoriesToRender = isGlobalView ? globalMemories : [...globalMemories, ...chatMemories];
-
-                if (!memoriesToRender || memoriesToRender.length === 0) {
+                if (!memories || memories.length === 0) {
                     elements.memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória salva.</div>`;
                     return;
                 }
@@ -1218,7 +1213,7 @@
                 elements.memoryContainer.innerHTML = '';
                 const searchTerm = elements.memorySearch.value.toLowerCase();
                 
-                const filteredMemories = memoriesToRender.filter(mem => mem.text.toLowerCase().includes(searchTerm));
+                const filteredMemories = memories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
 
                 const groupedByTopic = filteredMemories.reduce((acc, mem) => {
                     (mem.topics || []).forEach(topic => {
@@ -1253,11 +1248,10 @@
                     topicContent.className = 'pl-4 pt-2';
 
                     topicMemories.forEach(mem => {
-                        const isGlobalMemory = globalMemories.some(gMem => gMem.id === mem.id);
                         const memEl = document.createElement('div');
-                        memEl.className = `memory-item p-3 mb-2 bg-gray-800 border-l-4 ${isGlobalMemory ? 'border-blue-500' : 'border-yellow-500'} rounded-r-lg shadow-sm`;
+                        memEl.className = 'memory-item p-3 mb-2 bg-gray-800 border-l-4 border-yellow-500 rounded-r-lg shadow-sm';
                         
-                        const moveButtonHTML = !isGlobalMemory && !isGlobalView
+                        const moveButtonHTML = !isGlobal 
                             ? `<button class="move-to-global-btn" data-id="${mem.id}" title="Mover para Global">🌐</button>` 
                             : '';
                         
@@ -1338,7 +1332,6 @@
             };
 
             const handleSend = async () => {
-                if (isAiTyping) return;
                 if (!appState.activeChatId) {
                     createNewChat();
                 }
@@ -1364,8 +1357,6 @@
                 const aiMessageWrapper = appendMessage('', 'ai', appState.settings.isProMode, [], false);
                 const aiContentDiv = aiMessageWrapper.querySelector('.markdown-content');
                 aiContentDiv.innerHTML = '<span class="blinking-cursor"></span>';
-                
-                setUiLock(true);
 
                 try {
                     const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
@@ -1381,16 +1372,14 @@
                         useDynamicPersona: appState.settings.dynamicPersona
                     };
                     
-                    abortController = new AbortController();
                     const response = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                        signal: abortController.signal
+                        body: JSON.stringify(payload)
                     });
                     
                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido no backend.' }));
+                        const errorData = await response.json();
                         if (response.status === 401) { 
                             setProUI(false); 
                             showNotification("Senha do Modo Pro incorreta."); 
@@ -1451,11 +1440,7 @@
                     }
 
                 } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        aiContentDiv.innerHTML = `<span class="text-red-500">**Erro:** ${error.message}</span>`;
-                    }
-                } finally {
-                    setUiLock(false);
+                    aiContentDiv.innerHTML = `<span class="text-red-500">**Erro:** ${error.message}</span>`;
                 }
             };
             
@@ -1541,26 +1526,10 @@
             };
             
             const deleteMemory = (memoryId) => {
-                let memoryFoundAndDeleted = false;
-                
-                // Tenta apagar da memória global
-                let index = appState.globalMemories.findIndex(mem => mem.id === memoryId);
+                const memories = getCurrentMemories();
+                const index = memories.findIndex(mem => mem.id === memoryId);
                 if (index !== -1) {
-                    appState.globalMemories.splice(index, 1);
-                    memoryFoundAndDeleted = true;
-                } else {
-                    // Se não encontrou, tenta apagar da memória do chat
-                    const chat = appState.chats[appState.activeChatId];
-                    if (chat && chat.memories) {
-                        index = chat.memories.findIndex(mem => mem.id === memoryId);
-                        if (index !== -1) {
-                            chat.memories.splice(index, 1);
-                            memoryFoundAndDeleted = true;
-                        }
-                    }
-                }
-
-                if (memoryFoundAndDeleted) {
+                    memories.splice(index, 1);
                     saveState();
                     renderMemories();
                 }
@@ -1666,20 +1635,6 @@
                 elements.renameTopicInput.focus();
             };
 
-            const setUiLock = (isLocked) => {
-                isAiTyping = isLocked;
-                elements.userInput.disabled = isLocked;
-                elements.sendButton.disabled = isLocked;
-                elements.attachFileBtn.disabled = isLocked;
-                if (isLocked) {
-                    elements.sendButton.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
-                    elements.sendButton.title = "Interromper";
-                } else {
-                    elements.sendButton.innerHTML = `<svg class="w-6 h-6 transform rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>`;
-                    elements.sendButton.title = "Enviar";
-                }
-            };
-
             // Canvas functions
             const copyCanvasContent = () => {
                 const chat = appState.chats[appState.activeChatId];
@@ -1712,15 +1667,7 @@
             // Event Listeners
             elements.createFirstChatBtn.addEventListener('click', () => createNewChat());
             elements.newChatBtn.addEventListener('click', () => createNewChat());
-            elements.sendButton.addEventListener('click', () => {
-                if (isAiTyping) {
-                    if (abortController) {
-                        abortController.abort();
-                    }
-                } else {
-                    handleSend();
-                }
-            });
+            elements.sendButton.addEventListener('click', handleSend);
             elements.userInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
