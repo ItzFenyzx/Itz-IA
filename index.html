@@ -498,7 +498,7 @@
     </div>
     
     <!-- Interface Principal -->
-    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden opacity-0">
+    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden opacity-0 transition-opacity duration-500">
         <!-- Barra Lateral Esquerda -->
         <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
             <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
@@ -958,8 +958,8 @@
                     elements.emptyState.classList.add('fade-out');
                     setTimeout(() => {
                         elements.emptyState.classList.add('panel-hidden');
-                        elements.mainInterface.classList.remove('panel-hidden');
-                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
+                        elements.mainInterface.classList.remove('opacity-0');
+                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 35);
                     }, 500);
                 }
                 
