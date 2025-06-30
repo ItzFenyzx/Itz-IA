@@ -484,6 +484,30 @@
         .dark .drag-over {
             background-color: rgba(102, 126, 234, 0.2) !important;
         }
+        /* --- NOVOS ESTILOS PARA MODO BRANCO --- */
+body.light-mode-active .sua-classe-de-popup {
+    background-color: #ffffff; /* Fundo branco */
+    color: #000000; /* Texto preto */
+    border: 1px solid #cccccc; /* Borda clara */
+    /* Adicione outros estilos se necessário (padding, box-shadow, etc.) */
+}
+
+body.light-mode-active .sua-classe-de-popup .alguma-classe-interna { /* Se houver elementos internos que precisam de estilo diferente */
+    color: #333333; /* Exemplo: texto de um subtítulo */
+}
+
+
+body.light-mode-active .sua-classe-de-botao {
+    background-color: #eeeeee; /* Cor de fundo clara para o botão */
+    color: #000000; /* Cor do texto preta */
+    border: 1px solid #aaaaaa; /* Borda */
+    /* Você pode ajustar as cores e bordas dos botões para serem diferentes mas harmoniosas no tema claro */
+}
+
+body.light-mode-active .sua-classe-de-botao:hover { /* Estilo ao passar o mouse */
+    background-color: #dddddd;
+    border-color: #999999;
+}
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
@@ -1835,6 +1859,40 @@
             
             loadState();
         });
+        // Obtém a referência para o botão de alternar tema UMA ÚNICA VEZ
+const toggleThemeButton = document.getElementById('toggle-theme-button');
+
+// --- Lógica para aplicar o tema salvo ao carregar a página ---
+// Executa esta lógica assim que o DOM (estrutura da página) estiver pronto
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme');
+    const body = document.body; // Obtém a referência para o body aqui também
+
+    if (savedTheme === 'light') {
+        // Se o tema salvo for "light", adiciona a classe
+        body.classList.add('light-mode-active');
+    }
+    // Se não houver tema salvo ou for "dark", o body não terá a classe light-mode-active,
+    // mantendo o tema escuro (se for o seu padrão).
+});
+
+// --- Lógica para alternar o tema ao clicar no botão e salvar a preferência ---
+// Verifica se o botão existe antes de adicionar o listener
+if (toggleThemeButton) {
+    toggleThemeButton.addEventListener('click', () => {
+        const body = document.body; // Obtém a referência para o body
+
+        // Alterna a classe 'light-mode-active' no body
+        body.classList.toggle('light-mode-active');
+
+        // Salva a preferência no Local Storage
+        if (body.classList.contains('light-mode-active')) {
+            localStorage.setItem('theme', 'light');
+        } else {
+            localStorage.setItem('theme', 'dark');
+        }
+    });
+}
     </script>
 </body>
 </html>
