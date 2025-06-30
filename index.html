@@ -508,6 +508,28 @@ body.light-mode-active .sua-classe-de-botao:hover { /* Estilo ao passar o mouse 
     background-color: #dddddd;
     border-color: #999999;
 }
+/* Estilos para os botões de Cancelar no modo claro */
+/* Estes seletores visam os botões de cancelar dentro dos modais */
+body.light-mode-active #renameModal .bg-gray-600,
+body.light-mode-active #renameTopicModal .bg-gray-600,
+body.light-mode-active #memoryModal .bg-gray-600,
+body.light-mode-active #confirmModal .bg-gray-600,
+body.light-mode-active #passwordModal .bg-gray-600 {
+    background-color: var(--bg-secondary); /* Fundo claro do tema claro */
+    color: var(--text-primary); /* Texto primário do tema claro */
+    border: 1px solid var(--border-color); /* Borda clara do tema claro */
+}
+
+/* Opcional: Estilo hover para os botões de Cancelar no modo claro */
+body.light-mode-active #renameModal .bg-gray-600:hover,
+body.light-mode-active #renameTopicModal .bg-gray-600:hover,
+body.light-mode-active #memoryModal .bg-gray-600:hover,
+body.light-mode-active #confirmModal .bg-gray-600:hover,
+body.light-mode-active #passwordModal .bg-gray-600:hover {
+    background-color: var(--bg-tertiary); /* Cor de fundo um pouco mais escura no hover */
+    border-color: var(--text-secondary); /* Borda com cor de texto secundário no hover */
+}
+
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
