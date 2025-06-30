@@ -14,19 +14,34 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --bg-tertiary: #e9ecef;
-            --text-primary: #212529; --text-secondary: #495057;
-            --border-color: #dee2e6; --accent-pro: #fd7e14;
+            --bg-primary: #ffffff; 
+            --bg-secondary: #f8f9fa; 
+            --bg-tertiary: #e9ecef;
+            --text-primary: #212529; 
+            --text-secondary: #495057;
+            --border-color: #dee2e6; 
+            --accent-pro: #fd7e14;
             --empty-state-bg: #f0f2f5;
+            --canvas-bg: #ffffff;
+            --canvas-border: #e0e0e0;
         }
+        
         .dark {
-            --bg-primary: #131314; --bg-secondary: #1e1f20; --bg-tertiary: #35363a;
-            --text-primary: #e8eaed; --text-secondary: #9aa0a6;
-            --border-color: #4a4a4e; --accent-pro: #fbbc04;
+            --bg-primary: #131314; 
+            --bg-secondary: #1e1f20; 
+            --bg-tertiary: #35363a;
+            --text-primary: #e8eaed; 
+            --text-secondary: #9aa0a6;
+            --border-color: #4a4a4e; 
+            --accent-pro: #fbbc04;
             --empty-state-bg: #0f1011;
+            --canvas-bg: #1a1a1a;
+            --canvas-border: #333333;
         }
 
-        * { transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
+        * { 
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; 
+        }
         
         body { 
             font-family: 'Inter', sans-serif; 
@@ -35,103 +50,422 @@
             overflow-y: auto;
         }
         
-        .empty-state-bg { background-color: var(--empty-state-bg); }
+        .empty-state { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
         
-        .chat-bubble-user { background-color: #3b82f6; color: white; }
-        .chat-bubble-ai { background-color: var(--bg-tertiary); color: var(--text-primary); }
-        .chat-bubble-ai-pro { background-color: #4a3c1a; border: 1px solid var(--accent-pro); color: #fef08a; }
+        .dark .empty-state {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        }
         
-        .markdown-content h1, .markdown-content h2, .markdown-content h3 { font-weight: bold; margin-top: 1rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.25rem;}
-        .markdown-content p { margin-bottom: 0.75rem; line-height: 1.6; }
-        .markdown-content ul, .markdown-content ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
-        .markdown-content code:not(pre > code) { background-color: var(--bg-secondary); padding: 0.2em 0.4em; border-radius: 3px; font-family: 'Courier New', Courier, monospace; }
-        .markdown-content pre { background-color: var(--bg-secondary); padding: 1rem; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;}
-        .markdown-content a { color: #8ab4f8; text-decoration: underline; }
+        .chat-bubble-user { 
+            background-color: #3b82f6; 
+            color: white; 
+        }
+        
+        .chat-bubble-ai { 
+            background-color: var(--bg-tertiary); 
+            color: var(--text-primary); 
+        }
+        
+        .chat-bubble-ai-pro { 
+            background-color: #4a3c1a; 
+            border: 1px solid var(--accent-pro); 
+            color: #fef08a; 
+        }
+        
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 { 
+            font-weight: bold; 
+            margin-top: 1rem; 
+            margin-bottom: 0.5rem; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 0.25rem;
+        }
+        
+        .markdown-content p { 
+            margin-bottom: 0.75rem; 
+            line-height: 1.6; 
+        }
+        
+        .markdown-content ul, .markdown-content ol { 
+            margin-left: 1.5rem; 
+            margin-bottom: 0.75rem; 
+        }
+        
+        .markdown-content code:not(pre > code) { 
+            background-color: var(--bg-secondary); 
+            padding: 0.2em 0.4em; 
+            border-radius: 3px; 
+            font-family: 'Courier New', Courier, monospace; 
+        }
+        
+        .markdown-content pre { 
+            background-color: var(--bg-secondary); 
+            padding: 1rem; 
+            border-radius: 8px; 
+            overflow-x: auto; 
+            white-space: pre-wrap; 
+            word-wrap: break-word;
+        }
+        
+        .markdown-content a { 
+            color: #8ab4f8; 
+            text-decoration: underline; 
+        }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #7a7a7a; }
+        .custom-scrollbar::-webkit-scrollbar { 
+            width: 6px; 
+        }
         
-        .toggle-bg:after { content: ''; position: absolute; top: 2px; left: 2px; background: white; border-radius: 50%; height: 1.25rem; width: 1.25rem; transition: 0.2s; }
-        input:checked + .toggle-bg:after { transform: translateX(100%); }
-        input:checked + .toggle-bg { background-color: #34d399; }
+        .custom-scrollbar::-webkit-scrollbar-track { 
+            background: transparent; 
+        }
         
-        .resizer { background-color: var(--border-color); width: 4px; cursor: col-resize; z-index: 10; opacity: 0.5; transition: opacity 0.2s; }
-        .resizer:hover { opacity: 1; }
-        .panel-hidden { display: none !important; }
-        .chat-list-item.active { background-color: var(--bg-tertiary); }
-        .view-btn.active { background-color: var(--bg-tertiary); color: var(--text-primary); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { 
+            background: #5f6368; 
+            border-radius: 3px; 
+        }
         
-        .input-container { max-height: 200px; }
-        .input-container textarea { resize: none; overflow: hidden; }
-        .input-container textarea.has-scroll { overflow-y: auto; }
-        .input-container textarea::-webkit-scrollbar { width: 4px; }
-        .input-container textarea::-webkit-scrollbar-track { background: transparent; }
-        .input-container textarea::-webkit-scrollbar-thumb { background: #5f6368; border-radius: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { 
+            background: #7a7a7a; 
+        }
         
-        .canvas-mode #main-chat-panel { width: 350px !important; flex-shrink: 0; }
-        .canvas-mode #right-panel-container { flex: 1 !important; width: auto !important; max-width: 60% !important; }
+        .toggle-bg:after { 
+            content: ''; 
+            position: absolute; 
+            top: 2px; 
+            left: 2px; 
+            background: white; 
+            border-radius: 50%; 
+            height: 1.25rem; 
+            width: 1.25rem; 
+            transition: 0.2s; 
+        }
         
-        .right-panel-collapsed { width: 0 !important; min-width: 0 !important; overflow: hidden; }
-        .expand-right-panel-btn { position: fixed; top: 50%; right: 10px; z-index: 30; transform: translateY(-50%); }
+        input:checked + .toggle-bg:after { 
+            transform: translateX(100%); 
+        }
         
-        .canvas-content { max-height: 70vh; overflow-y: auto; }
-        .canvas-content pre { position: relative; }
-        .canvas-content .line-numbers { position: absolute; left: 0; top: 0; padding: 1rem 0.5rem; background: rgba(0,0,0,0.1); border-right: 1px solid var(--border-color); font-family: monospace; font-size: 0.8em; line-height: 1.5; color: var(--text-secondary); }
-        .canvas-content .code-content { padding-left: 3rem; }
+        input:checked + .toggle-bg { 
+            background-color: #34d399; 
+        }
         
-        .memory-topic-header { cursor: pointer; }
-        .memory-topic-header:hover .rename-topic-btn { opacity: 1; }
-        .rename-topic-btn { opacity: 0; transition: opacity 0.2s; }
+        .resizer { 
+            background-color: var(--border-color); 
+            width: 4px; 
+            cursor: col-resize; 
+            z-index: 10; 
+            opacity: 0.5; 
+            transition: opacity 0.2s; 
+        }
+        
+        .resizer:hover { 
+            opacity: 1; 
+        }
+        
+        .panel-hidden { 
+            display: none !important; 
+        }
+        
+        .chat-list-item.active { 
+            background-color: var(--bg-tertiary); 
+        }
+        
+        .view-btn.active { 
+            background-color: var(--bg-tertiary); 
+            color: var(--text-primary); 
+        }
+        
+        .input-container { 
+            max-height: 200px; 
+        }
+        
+        .input-container textarea { 
+            resize: none; 
+            overflow: hidden; 
+        }
+        
+        .input-container textarea.has-scroll { 
+            overflow-y: auto; 
+        }
+        
+        .input-container textarea::-webkit-scrollbar { 
+            width: 4px; 
+        }
+        
+        .input-container textarea::-webkit-scrollbar-track { 
+            background: transparent; 
+        }
+        
+        .input-container textarea::-webkit-scrollbar-thumb { 
+            background: #5f6368; 
+            border-radius: 2px; 
+        }
+        
+        .canvas-mode #main-chat-panel { 
+            width: 350px !important; 
+            flex-shrink: 0; 
+        }
+        
+        .canvas-mode #right-panel-container { 
+            flex: 1 !important; 
+            width: auto !important; 
+            max-width: 60% !important; 
+        }
+        
+        .right-panel-collapsed { 
+            width: 0 !important; 
+            min-width: 0 !important; 
+            overflow: hidden; 
+        }
+        
+        .expand-right-panel-btn { 
+            position: fixed; 
+            top: 50%; 
+            right: 10px; 
+            z-index: 30; 
+            transform: translateY(-50%); 
+        }
+        
+        .canvas-content { 
+            max-height: 70vh; 
+            overflow-y: auto; 
+            background: var(--canvas-bg);
+            border: 1px solid var(--canvas-border);
+            border-radius: 8px;
+        }
+        
+        .canvas-content pre { 
+            position: relative; 
+            margin: 0;
+            background: var(--canvas-bg) !important;
+        }
+        
+        .canvas-content .line-numbers { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            padding: 1rem 0.5rem; 
+            background: rgba(0,0,0,0.1); 
+            border-right: 1px solid var(--border-color); 
+            font-family: 'Fira Code', 'Courier New', monospace; 
+            font-size: 0.8em; 
+            line-height: 1.5; 
+            color: var(--text-secondary); 
+            user-select: none;
+        }
+        
+        .canvas-content .code-content { 
+            padding-left: 3rem; 
+            font-family: 'Fira Code', 'Courier New', monospace;
+        }
+        
+        .memory-topic-header { 
+            cursor: pointer; 
+        }
+        
+        .memory-topic-header:hover .rename-topic-btn { 
+            opacity: 1; 
+        }
+        
+        .rename-topic-btn { 
+            opacity: 0; 
+            transition: opacity 0.2s; 
+        }
         
         #right-panel-container {
-            min-width: 384px; max-width: 60%;
+            min-width: 384px; 
+            max-width: 60%;
             transition: width 0.3s ease-in-out;
         }
         
         .canvas-resizer {
-            position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-            background-color: var(--border-color); cursor: col-resize; z-index: 20;
-            opacity: 0.5; transition: opacity 0.2s;
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            bottom: 0; 
+            width: 4px;
+            background-color: var(--border-color); 
+            cursor: col-resize; 
+            z-index: 20;
+            opacity: 0.5; 
+            transition: opacity 0.2s;
         }
         
-        .canvas-resizer:hover { opacity: 1; background-color: #3b82f6; }
-        .canvas-resizing { user-select: none; }
+        .canvas-resizer:hover { 
+            opacity: 1; 
+            background-color: #3b82f6; 
+        }
+        
+        .canvas-resizing { 
+            user-select: none; 
+        }
         
         .canvas-toolbar {
-            background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color);
-            padding: 0.5rem; display: flex; justify-content: between; align-items: center;
-            font-size: 0.875rem; color: var(--text-secondary);
+            background: var(--bg-tertiary); 
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            font-size: 0.875rem; 
+            color: var(--text-secondary);
+            border-radius: 8px 8px 0 0;
         }
         
-        .canvas-toolbar .toolbar-left { display: flex; align-items: center; gap: 0.5rem; }
-        .canvas-toolbar .toolbar-right { display: flex; align-items: center; gap: 0.25rem; }
+        .canvas-toolbar .toolbar-left { 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem; 
+        }
+        
+        .canvas-toolbar .toolbar-right { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+        }
         
         .canvas-toolbar button {
-            padding: 0.25rem 0.5rem; border-radius: 0.25rem;
-            background: transparent; border: 1px solid var(--border-color);
-            color: var(--text-secondary); font-size: 0.75rem;
-            cursor: pointer; transition: all 0.2s;
+            padding: 0.5rem 0.75rem; 
+            border-radius: 0.375rem;
+            background: var(--bg-secondary); 
+            border: 1px solid var(--border-color);
+            color: var(--text-primary); 
+            font-size: 0.75rem;
+            cursor: pointer; 
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
         }
         
-        .canvas-toolbar button:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .canvas-toolbar button:hover { 
+            background: var(--bg-primary); 
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
         
         .move-to-global-btn {
-            background: #059669; color: white; border: none;
-            padding: 0.125rem 0.5rem; border-radius: 0.25rem;
-            font-size: 0.75rem; cursor: pointer;
-            opacity: 0; transition: opacity 0.2s;
+            background: #059669; 
+            color: white; 
+            border: none;
+            padding: 0.125rem 0.5rem; 
+            border-radius: 0.25rem;
+            font-size: 0.75rem; 
+            cursor: pointer;
+            opacity: 0; 
+            transition: opacity 0.2s;
         }
         
-        .move-to-global-btn:hover { background: #047857; }
+        .move-to-global-btn:hover { 
+            background: #047857; 
+        }
         
-        .memory-item:hover .move-to-global-btn { opacity: 1; }
+        .memory-item:hover .move-to-global-btn { 
+            opacity: 1; 
+        }
+
+        .canvas-empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            text-align: center;
+            color: var(--text-secondary);
+            background: var(--canvas-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            margin: 1rem;
+        }
+
+        .canvas-empty-state svg {
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .canvas-document {
+            background: var(--canvas-bg);
+            border: 1px solid var(--canvas-border);
+            border-radius: 8px;
+            margin: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .canvas-document-header {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .canvas-document-content {
+            padding: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .empty-state-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .empty-state-container h1 {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .empty-state-container p {
+            font-size: 1.25rem;
+            opacity: 0.8;
+            margin-bottom: 2rem;
+        }
+
+        .empty-state-container button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .empty-state-container button:hover {
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
     
-    <div class="flex flex-row flex-1 overflow-hidden">
+    <!-- Estado Vazio (sem chats) -->
+    <div id="empty-state" class="empty-state panel-hidden">
+        <div class="empty-state-container">
+            <h1>Phoenix Chat</h1>
+            <p>Bem-vindo ao seu assistente de IA pessoal</p>
+            <button id="create-first-chat-btn">Criar Primeiro Chat</button>
+        </div>
+    </div>
+    
+    <!-- Interface Principal -->
+    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden">
         <!-- Barra Lateral Esquerda -->
         <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
             <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
@@ -194,7 +528,7 @@
                             </div>
                         </div>
                         <div id="attachment-preview-container" class="p-2 border-t border-[var(--border-color)] hidden"></div>
-                        <div class="flex flex-row items-end pt-4 border-t border-[var(--border-color)] space-x-2">
+                        <div class="flex flex-row items-center pt-4 border-t border-[var(--border-color)] space-x-2">
                             <button id="attachFileBtn" class="p-3 rounded-full hover:bg-[var(--bg-tertiary)] flex-shrink-0 text-[var(--text-secondary)]" title="Anexar Imagem">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
@@ -203,12 +537,12 @@
                             <input type="file" id="file-input" class="hidden" accept="image/*">
                             <div class="flex-grow relative input-container">
                                 <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none" placeholder="Digite sua mensagem..." rows="1"></textarea>
-                                <button id="sendButton" class="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white p-2">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                                    </svg>
-                                </button>
                             </div>
+                            <button id="sendButton" class="p-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                                </svg>
+                            </button>
                         </div>
                      </div>
                 </div>
@@ -248,22 +582,28 @@
                 <div id="canvas-panel" class="flex-grow flex-col hidden">
                     <div class="canvas-toolbar">
                         <div class="toolbar-left">
-                            <span id="canvas-file-type">Documento</span>
+                            <span id="canvas-file-type">📄 Documento</span>
                             <span id="canvas-line-count">0 linhas</span>
                         </div>
                         <div class="toolbar-right">
-                            <button id="canvas-copy-btn" title="Copiar Conteúdo">📋</button>
-                            <button id="canvas-download-btn" title="Baixar">💾</button>
-                            <button id="canvas-clear-btn" title="Limpar">🗑️</button>
+                            <button id="canvas-copy-btn" title="Copiar Conteúdo">
+                                📋 Copiar
+                            </button>
+                            <button id="canvas-download-btn" title="Baixar">
+                                💾 Baixar
+                            </button>
+                            <button id="canvas-clear-btn" title="Limpar">
+                                🗑️ Limpar
+                            </button>
                         </div>
                     </div>
-                    <div id="canvas-content" class="flex-grow p-4 bg-[var(--bg-primary)] text-[var(--text-primary)] custom-scrollbar overflow-y-auto canvas-content">
-                        <div class="text-center text-[var(--text-secondary)] py-8">
-                            <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div id="canvas-content" class="flex-grow custom-scrollbar overflow-y-auto">
+                        <div class="canvas-empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
-                            <p>O Canvas está vazio.</p>
-                            <p class="text-xs mt-2">Conteúdo técnico aparecerá aqui automaticamente.</p>
+                            <h3>Canvas Vazio</h3>
+                            <p>Conteúdo técnico e documentos aparecerão aqui automaticamente</p>
                         </div>
                     </div>
                 </div>
@@ -405,6 +745,8 @@
 
             const elements = {
                 body: document.body,
+                emptyState: document.getElementById('empty-state'),
+                mainInterface: document.getElementById('main-interface'),
                 leftSidebar: document.getElementById('left-sidebar'),
                 mainContainer: document.getElementById('main-container'),
                 mainChatPanel: document.getElementById('main-chat-panel'),
@@ -419,6 +761,7 @@
                 userInput: document.getElementById('userInput'),
                 attachmentPreview: document.getElementById('attachment-preview-container'),
                 
+                createFirstChatBtn: document.getElementById('create-first-chat-btn'),
                 newChatBtn: document.getElementById('newChatBtn'),
                 collapseChatListBtn: document.getElementById('collapse-chat-list-btn'),
                 expandChatListBtn: document.getElementById('expand-chat-list-btn'),
@@ -530,11 +873,11 @@
 
             const saveState = () => {
                 const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v17', JSON.stringify(stateToSave));
+                localStorage.setItem('phoenixChatState_v20', JSON.stringify(stateToSave));
             };
 
             const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v17');
+                const savedState = localStorage.getItem('phoenixChatState_v20');
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
                     parsedState.settings = { ...appState.settings, ...parsedState.settings };
@@ -552,11 +895,12 @@
             const updateEmptyState = () => {
                 const hasChats = Object.keys(appState.chats).length > 0;
                 if (!hasChats) {
-                    elements.body.classList.add('empty-state-bg');
-                    elements.chatPlaceholder.classList.remove('panel-hidden');
+                    elements.emptyState.classList.remove('panel-hidden');
+                    elements.mainInterface.classList.add('panel-hidden');
                     appState.activeChatId = null;
                 } else {
-                    elements.body.classList.remove('empty-state-bg');
+                    elements.emptyState.classList.add('panel-hidden');
+                    elements.mainInterface.classList.remove('panel-hidden');
                     if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
                         appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
                     }
@@ -574,7 +918,8 @@
                     memories: [], 
                     canvasContent: '' 
                 };
-                elements.body.classList.remove('empty-state-bg');
+                elements.emptyState.classList.add('panel-hidden');
+                elements.mainInterface.classList.remove('panel-hidden');
                 if (save) { 
                     switchChat(newChatId); 
                 } else {
@@ -735,39 +1080,44 @@
                 
                 if (!content || content.trim() === '') {
                     elements.canvasContent.innerHTML = `
-                        <div class="text-center text-[var(--text-secondary)] py-8">
-                            <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="canvas-empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                             </svg>
-                            <p>O Canvas está vazio.</p>
-                            <p class="text-xs mt-2">Conteúdo técnico aparecerá aqui automaticamente.</p>
+                            <h3>Canvas Vazio</h3>
+                            <p>Conteúdo técnico e documentos aparecerão aqui automaticamente</p>
                         </div>
                     `;
-                    elements.canvasFileType.textContent = 'Documento';
+                    elements.canvasFileType.textContent = '📄 Documento';
                     elements.canvasLineCount.textContent = '0 linhas';
                 } else {
-                    let parsedContent = DOMPurify.sanitize(marked.parse(content));
-                    
                     // Detectar tipo de arquivo
-                    let fileType = 'Documento';
-                    if (content.includes('```javascript') || content.includes('```js')) fileType = 'JavaScript';
-                    else if (content.includes('```python') || content.includes('```py')) fileType = 'Python';
-                    else if (content.includes('```html')) fileType = 'HTML';
-                    else if (content.includes('```css')) fileType = 'CSS';
-                    else if (content.includes('```json')) fileType = 'JSON';
-                    else if (content.includes('```')) fileType = 'Código';
+                    let fileType = '📄 Documento';
+                    if (content.includes('```javascript') || content.includes('```js')) fileType = '🟨 JavaScript';
+                    else if (content.includes('```python') || content.includes('```py')) fileType = '🐍 Python';
+                    else if (content.includes('```html')) fileType = '🌐 HTML';
+                    else if (content.includes('```css')) fileType = '🎨 CSS';
+                    else if (content.includes('```json')) fileType = '📋 JSON';
+                    else if (content.includes('```')) fileType = '💻 Código';
                     
                     // Contar linhas
                     const lineCount = content.split('\n').length;
                     
-                    // Adicionar números de linha para blocos de código
-                    parsedContent = parsedContent.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (match, attrs, code) => {
-                        const lines = code.split('\n');
-                        const lineNumbers = lines.map((_, i) => i + 1).join('\n');
-                        return `<pre class="relative"><div class="line-numbers">${lineNumbers}</div><code${attrs} class="code-content">${code}</code></pre>`;
-                    });
+                    // Renderizar como documento estilizado
+                    const parsedContent = DOMPurify.sanitize(marked.parse(content));
                     
-                    elements.canvasContent.innerHTML = parsedContent;
+                    elements.canvasContent.innerHTML = `
+                        <div class="canvas-document">
+                            <div class="canvas-document-header">
+                                <h3 class="font-bold text-lg">${fileType}</h3>
+                                <span class="text-sm text-[var(--text-secondary)]">${lineCount} linhas</span>
+                            </div>
+                            <div class="canvas-document-content">
+                                ${parsedContent}
+                            </div>
+                        </div>
+                    `;
+                    
                     elements.canvasFileType.textContent = fileType;
                     elements.canvasLineCount.textContent = `${lineCount} linhas`;
                     
@@ -1050,7 +1400,13 @@
                     return; 
                 }
                 
-                const newMemory = { id: `mem-${Date.now()}`, text, topics };
+                const newMemory = { 
+                    id: `mem-${Date.now()}`, 
+                    text, 
+                    topics,
+                    tokenCount: Math.ceil(text.length / 4),
+                    lastAccessed: Date.now()
+                };
                 
                 if (isGlobal) {
                     appState.globalMemories.push(newMemory);
@@ -1130,10 +1486,11 @@
                     const response = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'verifyPassword', token: password })
+                        body: JSON.stringify({ action: 'verifyPassword', proToken: password })
                     });
                     const result = await response.json();
                     elements.passwordModal.classList.add('hidden');
+                    elements.proPasswordInput.value = '';
                     if (result.success) {
                         appState.settings.proModeToken = password;
                         setProUI(true);
@@ -1144,6 +1501,7 @@
                     }
                 } catch (e) {
                     elements.passwordModal.classList.add('hidden');
+                    elements.proPasswordInput.value = '';
                     showNotification("Erro ao verificar a senha.");
                 }
             };
@@ -1206,6 +1564,7 @@
             };
 
             // Event Listeners
+            elements.createFirstChatBtn.addEventListener('click', () => createNewChat());
             elements.newChatBtn.addEventListener('click', () => createNewChat());
             elements.sendButton.addEventListener('click', handleSend);
             elements.userInput.addEventListener('keydown', (e) => {
