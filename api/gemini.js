@@ -1,304 +1,331 @@
-const CONTEXT_BUDGET_CHARS = 3500;
+const CONTEXT_BUDGET_CHARS = 30000;
+const MAX_MEMORY_CHARS = 5000;
 
-const BASE_MEMORY_CONTEXT = `
-Você é o "Phoenix Chat", uma IA de conversação avançada.
-- Seu criador é Arthur Nascimento Nogueira.
-- Você foi criado em 2025.
-- Você é baseado na tecnologia Gemini do Google.
-- O seu nome pode ser alterado pelo utilizador se ele desejar.
+export default async function handler(req, res) {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
 
-Responda sempre de forma útil, completa e direta. NÃO mencione informações sobre sua criação ou identidade a menos que seja especificamente perguntado sobre isso.
-`;
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Método não permitido' });
+    }
 
-const PROFESSIONAL_AREAS = {
-    'programação': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
-    'código': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
-    'script': 'Desenvolvedor de Software Sênior especialista em múltiplas linguagens',
-    'medicina': 'Médico especialista',
-    'saúde': 'Profissional de Saúde',
-    'direito': 'Advogado especialista',
-    'educação': 'Educador especializado',
-    'ensino': 'Educador especializado',
-    'negócios': 'Consultor de Negócios',
-    'marketing': 'Especialista em Marketing',
-    'design': 'Designer Profissional',
-    'arte': 'Artista e Designer',
-    'música': 'Músico e Produtor Musical',
-    'culinária': 'Chef Profissional',
-    'fitness': 'Personal Trainer e Nutricionista',
-    'psicologia': 'Psicólogo',
-    'engenharia': 'Engenheiro especialista',
-    'ciência': 'Cientista pesquisador',
-    'matemática': 'Matemático especialista',
-    'física': 'Físico especialista',
-    'química': 'Químico especialista',
-    'história': 'Historiador especialista',
-    'geografia': 'Geógrafo especialista',
-    'literatura': 'Crítico Literário e Escritor',
-    'escrita': 'Escritor Profissional',
-    'jornalismo': 'Jornalista especializado',
-    'fotografia': 'Fotógrafo Profissional',
-    'cinema': 'Crítico de Cinema e Cineasta',
-    'games': 'Especialista em Jogos e Game Designer',
-    'tecnologia': 'Especialista em Tecnologia',
-    'minecraft': 'Especialista em Minecraft e Desenvolvimento de Mods'
-};
+    try {
+        const { action, prompt, isPro, proToken, isAutoMemory, memories, image, useDynamicPersona } = req.body;
 
-function detectProfessionalArea(query) {
-    const lowerQuery = query.toLowerCase();
-    for (const [keyword, profession] of Object.entries(PROFESSIONAL_AREAS)) {
-        if (lowerQuery.includes(keyword)) {
-            return profession;
+        // Verificar senha do Modo Pro se necessário
+        if (action === 'verifyPassword') {
+            const correctPassword = process.env.PRO_MODE_PASSWORD;
+            if (!correctPassword) {
+                return res.status(500).json({ error: 'Senha do Modo Pro não configurada no servidor' });
+            }
+            return res.status(200).json({ success: proToken === correctPassword });
+        }
+
+        if (action !== 'chat') {
+            return res.status(400).json({ error: 'Ação não reconhecida' });
+        }
+
+        // Verificar API Key
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ error: 'API Key do Gemini não configurada' });
+        }
+
+        // Verificar senha do Modo Pro se estiver ativo
+        if (isPro) {
+            const correctPassword = process.env.PRO_MODE_PASSWORD;
+            if (!correctPassword || proToken !== correctPassword) {
+                return res.status(401).json({ error: 'Senha do Modo Pro incorreta' });
+            }
+        }
+
+        // Selecionar modelo
+        const model = isPro ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
+        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        // Construir contexto de memórias
+        let memoryContext = '';
+        let usedContext = [];
+        
+        if (memories && memories.length > 0) {
+            const relevantMemories = selectRelevantMemories(memories, prompt);
+            if (relevantMemories.length > 0) {
+                memoryContext = formatMemoriesForContext(relevantMemories);
+                usedContext = relevantMemories.map(mem => mem.topics ? mem.topics.join(', ') : 'Sem tópico');
+            }
+        }
+
+        // Construir Mega Prompt
+        const megaPrompt = buildMegaPrompt({
+            prompt,
+            memoryContext,
+            useDynamicPersona,
+            isPro
+        });
+
+        // Preparar payload para o Gemini
+        const geminiPayload = {
+            contents: [{
+                parts: []
+            }]
+        };
+
+        // Adicionar texto
+        geminiPayload.contents[0].parts.push({
+            text: megaPrompt
+        });
+
+        // Adicionar imagem se fornecida
+        if (image) {
+            geminiPayload.contents[0].parts.push({
+                inline_data: {
+                    mime_type: image.mimeType,
+                    data: image.data
+                }
+            });
+        }
+
+        // Fazer chamada única à API do Gemini
+        const response = await fetch(baseUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(geminiPayload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Erro da API Gemini:', errorData);
+            
+            if (response.status === 429) {
+                return res.status(429).json({ 
+                    error: 'Limite de requisições atingido. Tente novamente em alguns segundos.' 
+                });
+            }
+            
+            return res.status(500).json({ 
+                error: `Erro da API Gemini: ${response.status} - ${errorData}` 
+            });
+        }
+
+        const result = await response.json();
+        
+        if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+            return res.status(500).json({ error: 'Resposta inválida da API Gemini' });
+        }
+
+        const fullResponse = result.candidates[0].content.parts[0].text;
+
+        // Processar resposta para separar chat e canvas
+        const { aiResponse, canvasContent } = processResponse(fullResponse);
+
+        // Gerar memória automática se ativada
+        let newMemory = null;
+        if (isAutoMemory && aiResponse.trim()) {
+            try {
+                newMemory = await generateAutoMemory(prompt, aiResponse, apiKey);
+            } catch (error) {
+                console.error('Erro ao gerar memória automática:', error);
+                // Não falhar a requisição por causa da memória
+            }
+        }
+
+        return res.status(200).json({
+            aiResponse,
+            canvasContent,
+            newMemory,
+            usedContext
+        });
+
+    } catch (error) {
+        console.error('Erro no handler:', error);
+        return res.status(500).json({ 
+            error: 'Erro interno do servidor: ' + error.message 
+        });
+    }
+}
+
+function buildMegaPrompt({ prompt, memoryContext, useDynamicPersona, isPro }) {
+    let megaPrompt = `### INSTRUÇÕES DE SISTEMA ###
+Você é um assistente de IA avançado. Siga rigorosamente todas as regras abaixo numa única resposta.
+
+1. **IDENTIDADE BASE (Sempre Presente):**
+   - Você é o "Phoenix Chat".
+   - Seu criador é Arthur Nascimento Nogueira.
+   - Sua data de criação é ${new Date().toLocaleDateString('pt-BR')}.
+   - Sua tecnologia é baseada no Gemini do Google, com os devidos créditos.
+   - IMPORTANTE: Só mencione essas informações se for EXPLICITAMENTE perguntado sobre elas.
+
+2. **MODO DE OPERAÇÃO:**`;
+
+    if (useDynamicPersona) {
+        megaPrompt += `
+   - Analise a pergunta do usuário para definir a persona de especialista mais adequada para responder.
+   - Adote essa persona para formular sua resposta de forma natural e direta.
+   - NÃO se apresente como "Olá, sou um profissional..." - apenas responda no estilo da persona.`;
+    } else {
+        megaPrompt += `
+   - Aja como um doutor em todos os aspectos do conhecimento, um polímata com acesso a toda a informação humana.
+   - Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
+    }
+
+    if (memoryContext) {
+        megaPrompt += `
+
+3. **ANÁLISE DE CONTEXTO:**
+   - Analise o contexto da Base de Memória abaixo.
+   - Utilize estas informações para enriquecer sua resposta APENAS se forem diretamente relevantes.
+   - Se não forem relevantes, ignore-as e responda com base no seu conhecimento geral.
+   
+   --- CONTEXTO ---
+${memoryContext}
+   --- FIM DO CONTEXTO ---`;
+    }
+
+    megaPrompt += `
+
+4. **GERAÇÃO DE CANVAS (Instrução Permanente):**
+   - Se sua resposta contiver código, scripts, documentos técnicos, ou conteúdo que seria melhor apresentado em formato de documento, estruture essa parte dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS].
+   - O texto fora dessas tags deve servir como uma breve introdução ou resumo para o chat.
+   - Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.
+   - Para códigos, inclua comentários explicativos e números de linha quando apropriado.
+
+5. **FOCO E PRECISÃO:**
+   - Concentre-se estritamente no que foi perguntado.
+   - Evite informações adicionais não solicitadas.
+   - Seja direto e objetivo na resposta.
+
+6. **TAREFA FINAL:**
+   - Com base em todas as regras acima, responda agora à pergunta do usuário.
+
+### PERGUNTA DO USUÁRIO ###
+${prompt}`;
+
+    return megaPrompt;
+}
+
+function selectRelevantMemories(memories, prompt) {
+    if (!memories || memories.length === 0) return [];
+    
+    const promptLower = prompt.toLowerCase();
+    const relevantMemories = [];
+    let totalChars = 0;
+    
+    // Ordenar por relevância (busca por palavras-chave nos tópicos e texto)
+    const scoredMemories = memories.map(memory => {
+        let score = 0;
+        const memoryText = memory.text.toLowerCase();
+        const memoryTopics = (memory.topics || []).join(' ').toLowerCase();
+        
+        // Pontuação por palavras-chave nos tópicos
+        const promptWords = promptLower.split(/\s+/);
+        promptWords.forEach(word => {
+            if (word.length > 3) {
+                if (memoryTopics.includes(word)) score += 3;
+                if (memoryText.includes(word)) score += 1;
+            }
+        });
+        
+        return { memory, score };
+    }).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    
+    // Selecionar memórias até o limite de caracteres
+    for (const item of scoredMemories) {
+        const memorySize = item.memory.text.length;
+        if (totalChars + memorySize <= MAX_MEMORY_CHARS) {
+            relevantMemories.push(item.memory);
+            totalChars += memorySize;
+        } else {
+            break;
         }
     }
-    return null;
+    
+    return relevantMemories;
 }
 
-async function callGemini(parts, apiKey, model) {
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  
-  const payload = {
-    contents: [{ role: 'user', parts: parts }],
-    safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-    ]
-  };
+function formatMemoriesForContext(memories) {
+    return memories.map(memory => {
+        const topics = memory.topics ? memory.topics.join(', ') : 'Geral';
+        return `[${topics}]: ${memory.text}`;
+    }).join('\n\n');
+}
 
-  const geminiResponse = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!geminiResponse.ok) {
-    const errorText = await geminiResponse.text();
-    console.error(`Erro na API do Gemini com o modelo ${model}: ${errorText}`);
-    if(geminiResponse.status === 429) {
-        throw { statusCode: 429, message: 'Limite de requisições da API atingido. Tente novamente em um minuto.' };
+function processResponse(fullResponse) {
+    const canvasBeginTag = '[CANVAS_BEGINS]';
+    const canvasEndTag = '[CANVAS_ENDS]';
+    
+    const beginIndex = fullResponse.indexOf(canvasBeginTag);
+    const endIndex = fullResponse.indexOf(canvasEndTag);
+    
+    if (beginIndex !== -1 && endIndex !== -1 && endIndex > beginIndex) {
+        const aiResponse = fullResponse.substring(0, beginIndex).trim();
+        const canvasContent = fullResponse.substring(
+            beginIndex + canvasBeginTag.length, 
+            endIndex
+        ).trim();
+        
+        return { aiResponse, canvasContent };
     }
-    throw { statusCode: geminiResponse.status, message: `Erro na API do Gemini: ${errorText}` };
-  }
-
-  const data = await geminiResponse.json();
-  
-  if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-    return data.candidates[0].content.parts[0].text;
-  }
-  if (data.promptFeedback?.blockReason) {
-      console.warn("Resposta bloqueada por segurança:", data.promptFeedback.blockReason);
-      return `(Minha resposta foi bloqueada por segurança: ${data.promptFeedback.blockReason})`;
-  }
-  
-  console.warn("API retornou uma resposta vazia ou com formato inesperado:", data);
-  return "(A IA retornou uma resposta vazia)";
+    
+    return { aiResponse: fullResponse, canvasContent: null };
 }
 
-export default async function handler(request, response) {
-  if (request.method !== 'POST') {
-    return response.status(405).json({ error: 'Method Not Allowed' });
-  }
+async function generateAutoMemory(userPrompt, aiResponse, apiKey) {
+    try {
+        const memoryPrompt = `Analise a seguinte conversa e gere um resumo estruturado para memória:
 
-  const { action } = request.body;
+PERGUNTA: ${userPrompt}
+RESPOSTA: ${aiResponse}
 
-  try {
-    if (action === 'verifyPassword') {
-      const { token } = request.body;
-      const correctPassword = process.env.PRO_MODE_PASSWORD;
-      if (!correctPassword) {
-        throw { statusCode: 500, message: 'Senha do Modo Pro não configurada no servidor.' };
-      }
-      return response.status(200).json({ success: token === correctPassword });
+Gere um objeto JSON com:
+- "text": resumo conciso do assunto principal (máximo 200 caracteres)
+- "topics": array com 1-3 palavras-chave relevantes (em minúsculas)
 
-    } else if (action === 'chat') {
-      const chatResponse = await handleChatRequest(request.body);
-      return response.status(200).json(chatResponse);
+Exemplo: {"text": "Usuário perguntou sobre X e foi explicado Y", "topics": ["palavra1", "palavra2"]}
 
-    } else {
-      throw { statusCode: 400, message: 'Ação desconhecida.' };
+Responda APENAS com o JSON válido:`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: memoryPrompt }]
+                }]
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Falha ao gerar memória automática');
+        }
+
+        const result = await response.json();
+        const memoryText = result.candidates[0].content.parts[0].text.trim();
+        
+        // Tentar extrair JSON da resposta
+        const jsonMatch = memoryText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const memoryData = JSON.parse(jsonMatch[0]);
+            return {
+                id: `mem-auto-${Date.now()}`,
+                text: memoryData.text,
+                topics: memoryData.topics || ['geral']
+            };
+        }
+        
+        throw new Error('Formato de memória inválido');
+        
+    } catch (error) {
+        console.error('Erro ao gerar memória automática:', error);
+        return null;
     }
-  } catch (error) {
-    console.error("Erro no handler principal:", error);
-    return response.status(error.statusCode || 500).json({ error: error.message || 'Erro interno do servidor.' });
-  }
 }
 
-async function handleChatRequest(body) {
-  const { 
-    prompt: userQuery, 
-    isPro, 
-    proToken, 
-    autoMemoryGlobal, 
-    autoMemoryChat, 
-    globalMemories, 
-    chatMemories, 
-    image, 
-    useDynamicPersona 
-  } = body;
-
-  if (!userQuery && !image) {
-    throw { statusCode: 400, message: 'Nenhum prompt ou imagem foi fornecido.' };
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw { statusCode: 500, message: 'Chave de API não configurada no servidor.' };
-  }
-
-  const correctPassword = process.env.PRO_MODE_PASSWORD;
-  let modelForFinalAnswer;
-  const fastModel = 'gemini-1.5-flash-latest';
-  const proModel = 'gemini-1.5-pro-latest';
-  
-  if (isPro) {
-    if (!correctPassword) throw { statusCode: 500, message: 'Senha do Modo Pro não configurada no servidor.' };
-    if (proToken !== correctPassword) throw { statusCode: 401, message: 'Senha do Modo Pro incorreta.' };
-    modelForFinalAnswer = proModel;
-  } else {
-    modelForFinalAnswer = fastModel;
-  }
-
-  const userPromptParts = [];
-  if (userQuery) {
-      userPromptParts.push({ text: `\n\nPERGUNTA DO UTILIZADOR:\n"${userQuery}"` });
-  }
-  if (image) {
-      userPromptParts.push({
-          inline_data: {
-              mime_type: image.mimeType,
-              data: image.data
-          }
-      });
-  }
-
-  // RAG - Contexto de memória (Global + Chat)
-  let contextPrompt = "";
-  let usedContextTopics = [];
-  const allMemories = [...(globalMemories || []), ...(chatMemories || [])];
-  
-  if (allMemories && allMemories.length > 0) {
-      const allTopics = [...new Set(allMemories.flatMap(m => m.topics))].filter(Boolean);
-      if (allTopics.length > 0) {
-          const topicRankPrompt = `Analise a pergunta do usuário e identifique quais dos seguintes tópicos são mais relevantes. Responda APENAS com os nomes dos tópicos, EM ORDEM DO MAIS PARA O MENOS RELEVANTE, separados por vírgula.\nTópicos disponíveis: ${allTopics.join(', ')}\n\nPergunta: "${userQuery}"`;
-          
-          try {
-              const rankedTopicsResponse = await callGemini([{text: topicRankPrompt}], apiKey, fastModel);
-              const rankedTopics = rankedTopicsResponse.split(',').map(t => t.trim().toLowerCase()).filter(t => allTopics.includes(t));
-              
-              if (rankedTopics.length > 0) {
-                  usedContextTopics = rankedTopics;
-                  let contextMemories = []; 
-                  let currentChars = 0;
-                  for (const topic of rankedTopics) {
-                      const memoriesInTopic = allMemories.filter(mem => mem.topics.includes(topic));
-                      for (const memory of memoriesInTopic) {
-                          if (currentChars + memory.text.length <= CONTEXT_BUDGET_CHARS) { 
-                              contextMemories.push(memory.text); 
-                              currentChars += memory.text.length; 
-                          } else { break; }
-                      }
-                      if (currentChars >= CONTEXT_BUDGET_CHARS) break;
-                  }
-                  if (contextMemories.length > 0) {
-                      const contextText = contextMemories.join("\n- ");
-                      contextPrompt = `Use o seguinte contexto da base de memória se for relevante, mas não se limite a ele:\n--- CONTEXTO ---\n- ${contextText}\n--- FIM DO CONTEXTO ---\n\n`;
-                  }
-              }
-          } catch (e) {
-              console.error("Erro ao processar contexto de memória:", e);
-          }
-      }
-  }
-
-  // Persona dinâmica (apenas se ativada)
-  let persona = "";
-  if (useDynamicPersona && userQuery) {
-      const detectedArea = detectProfessionalArea(userQuery);
-      if (detectedArea) {
-          persona = detectedArea;
-      }
-  }
-
-  // Prompt final
-  let finalSystemPrompt = BASE_MEMORY_CONTEXT;
-  if (useDynamicPersona && persona.trim()) {
-      finalSystemPrompt += `\nPara esta resposta, atue como um(a) **${persona.trim()}**. Responda de forma profissional e especializada, mas sem se apresentar ou mencionar sua persona.`;
-  }
-  finalSystemPrompt += `\n${contextPrompt}`;
-  finalSystemPrompt += `\nResponda à pergunta do usuário de forma completa, focada e direta, usando Markdown para formatação quando apropriado. Seja conciso e vá direto ao ponto solicitado.`;
-  if (contextPrompt) {
-      finalSystemPrompt += `\nSe o contexto da memória não for relevante para a pergunta, ignore-o e responda de forma natural com base no seu conhecimento geral.`;
-  }
-
-  const finalPromptParts = [{ text: finalSystemPrompt }, ...userPromptParts];
-  
-  // Resposta principal
-  const finalAiResponse = await callGemini(finalPromptParts, apiKey, modelForFinalAnswer);
-
-  // Verificar se precisa gerar conteúdo para o Canvas
-  let canvasContent = "";
-  const canvasKeywords = ['script', 'código', 'arquivo', 'documento', 'exemplo', 'template', 'estrutura', 'esquema', 'diagrama', 'lista detalhada', 'tabela', 'função', 'class', 'def ', 'import ', 'package', 'html', 'css', 'javascript', 'python', 'java', 'c++', 'sql'];
-  const hasCanvasContent = canvasKeywords.some(keyword => 
-      userQuery?.toLowerCase().includes(keyword) || 
-      finalAiResponse.toLowerCase().includes('```') ||
-      finalAiResponse.includes('```') ||
-      (finalAiResponse.match(/```/g) || []).length >= 2
-  );
-
-  if (hasCanvasContent) {
-      const canvasPrompt = `Extraia APENAS informações secundárias úteis para o Canvas (como scripts completos, códigos, exemplos práticos, estruturas detalhadas, listas organizadas, etc.). Se não houver informações secundárias relevantes, responda apenas "VAZIO".\n\nPergunta: "${userQuery}"\nResposta: "${finalAiResponse}"`;
-      try {
-          canvasContent = await callGemini([{text: canvasPrompt}], apiKey, fastModel);
-          if (canvasContent.trim().toUpperCase() === "VAZIO") {
-              canvasContent = "";
-          }
-      } catch (e) {
-          console.error("Erro ao gerar conteúdo do Canvas:", e);
-          canvasContent = "";
-      }
-  }
-
-  // Memória automática
-  let newGlobalMemory = null;
-  let newChatMemory = null;
-  
-  if (autoMemoryGlobal || autoMemoryChat) {
-      try {
-          const autoMemoryPrompt = `Analise a pergunta do usuário e a resposta da IA. Extraia o fato ou a informação mais importante e autocontida. Refine-a em uma entrada de memória concisa. Sugira até 3 tópicos relevantes de uma palavra. Responda APENAS no formato JSON: {"text": "sua memória refinada aqui", "topics": ["topico1", "topico2"]}\n\nPERGUNTA: "${userQuery || 'analise a imagem'}"\n\nRESPOSTA: "${finalAiResponse}"`;
-          
-          const autoMemoryResponse = await callGemini([{text: autoMemoryPrompt}], apiKey, fastModel);
-          
-          if(autoMemoryResponse.trim().startsWith('{')) {
-              const parsedMemory = JSON.parse(autoMemoryResponse);
-              if (parsedMemory.text && parsedMemory.topics) {
-                  if (autoMemoryGlobal) {
-                      newGlobalMemory = { 
-                          id: `mem-global-${Date.now()}`, 
-                          text: parsedMemory.text, 
-                          topics: parsedMemory.topics 
-                      };
-                  }
-                  if (autoMemoryChat) {
-                      newChatMemory = { 
-                          id: `mem-chat-${Date.now()}`, 
-                          text: parsedMemory.text, 
-                          topics: parsedMemory.topics 
-                      };
-                  }
-              }
-          }
-      } catch (e) {
-          console.error("Erro no processo de memória automática:", e);
-      }
-  }
-  
-  return {
-      aiResponse: finalAiResponse,
-      usedContext: usedContextTopics,
-      newGlobalMemory: newGlobalMemory,
-      newChatMemory: newChatMemory,
-      canvasContent: canvasContent
-  };
-}
