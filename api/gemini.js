@@ -1,7 +1,8 @@
-const MAX_CONTEXT_TOKENS = 4000; // Limite de tokens para contexto de memórias
-const MAX_MEMORY_GROUPS = 5; // Máximo 5 grupos de contexto
+// Constantes de configuração
+const MAX_CONTEXT_TOKENS = 4000;
+const MAX_MEMORY_GROUPS = 5;
 
-// Função para estimar tokens (aproximadamente 4 caracteres = 1 token)
+// Função para estimar tokens (aproximadamente 4 caracteres por token)
 function estimateTokens(text) {
     return Math.ceil(text.length / 4);
 }
@@ -22,11 +23,11 @@ function selectRelevantMemories(memories, prompt) {
     const promptLower = prompt.toLowerCase();
     const promptWords = promptLower.split(/\s+/).filter(word => word.length > 3);
     
-    // Calcular relevância e tokens para cada memória
+    // Calcular relevância de cada memória
     const scoredMemories = memories.map(memory => {
         let relevanceScore = 0;
         const memoryText = memory.text.toLowerCase();
-        const memoryTopics = (memory.topics || []).join(' ').toLowerCase();
+        const memoryTopics = (memory.topics || []).join(" ").toLowerCase();
         
         // Pontuação por palavras-chave
         promptWords.forEach(word => {
@@ -51,7 +52,7 @@ function selectRelevantMemories(memories, prompt) {
     // Agrupar por tópicos
     const groupedByTopic = {};
     scoredMemories.forEach(item => {
-        (item.memory.topics || ['geral']).forEach(topic => {
+        (item.memory.topics || ["geral"]).forEach(topic => {
             if (!groupedByTopic[topic]) {
                 groupedByTopic[topic] = [];
             }
@@ -59,7 +60,7 @@ function selectRelevantMemories(memories, prompt) {
         });
     });
     
-    // Selecionar até 5 grupos mais relevantes
+    // Selecionar os melhores grupos
     const selectedGroups = Object.entries(groupedByTopic)
         .map(([topic, items]) => ({
             topic,
@@ -69,7 +70,7 @@ function selectRelevantMemories(memories, prompt) {
         .sort((a, b) => b.totalRelevance - a.totalRelevance)
         .slice(0, MAX_MEMORY_GROUPS);
     
-    // Selecionar memórias dentro do limite de tokens
+    // Selecionar memórias respeitando limite de tokens
     const selectedMemories = [];
     let totalTokens = 0;
     
@@ -80,13 +81,13 @@ function selectRelevantMemories(memories, prompt) {
                 selectedMemories.push(item.memory);
                 totalTokens += memoryTokens;
             } else {
-                // Se não couber inteira, tenta uma versão truncada
+                // Truncar se ainda há espaço
                 const remainingTokens = MAX_CONTEXT_TOKENS - totalTokens;
-                if (remainingTokens > 50) { // Mínimo 50 tokens para ser útil
+                if (remainingTokens > 50) {
                     const truncatedText = item.memory.text.substring(0, remainingTokens * 4);
                     selectedMemories.push({
                         ...item.memory,
-                        text: truncatedText + '...',
+                        text: truncatedText + "...",
                         tokenCount: remainingTokens
                     });
                     totalTokens = MAX_CONTEXT_TOKENS;
@@ -102,10 +103,10 @@ function selectRelevantMemories(memories, prompt) {
 
 // Função para formatar memórias para contexto
 function formatMemoriesForContext(memories) {
-    if (!memories || memories.length === 0) return '';
+    if (!memories || memories.length === 0) return "";
     
     const groupedByTopic = memories.reduce((acc, memory) => {
-        (memory.topics || ['geral']).forEach(topic => {
+        (memory.topics || ["geral"]).forEach(topic => {
             if (!acc[topic]) acc[topic] = [];
             acc[topic].push(memory);
         });
@@ -114,15 +115,15 @@ function formatMemoriesForContext(memories) {
     
     return Object.entries(groupedByTopic)
         .map(([topic, mems]) => {
-            const topicMemories = mems.map(mem => `- ${mem.text}`).join('\n');
+            const topicMemories = mems.map(mem => `- ${mem.text}`).join("\n");
             return `**${topic.toUpperCase()}:**\n${topicMemories}`;
         })
-        .join('\n\n');
+        .join("\n\n");
 }
 
 // Função para construir o Mega Prompt detalhado
 function buildDetailedMegaPrompt({ prompt, memoryContext, useDynamicPersona, isPro }) {
-    const currentDate = new Date().toLocaleDateString('pt-BR');
+    const currentDate = new Date().toLocaleDateString("pt-BR");
     
     let megaPrompt = `## INSTRUÇÕES DE SISTEMA ###
 Você é um assistente de IA avançado. Siga rigorosamente todas as regras abaixo numa única resposta.
@@ -174,68 +175,66 @@ ${prompt}`;
     return megaPrompt;
 }
 
+// Função principal do handler
 export default async function handler(req, res) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    // Configurar CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
         return res.status(200).end();
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Método não permitido' });
+    if (req.method !== "POST") {
+        return res.status(405).json({ error: "Método não permitido" });
     }
 
     try {
         const { action, prompt, isPro, proToken, isAutoMemory, memories, image, useDynamicPersona } = req.body;
 
         // Verificar senha do Modo Pro se necessário
-        if (action === 'verifyPassword') {
+        if (action === "verifyPassword") {
             const correctPassword = process.env.PRO_MODE_PASSWORD;
             if (!correctPassword) {
-                return res.status(500).json({ error: 'Senha do Modo Pro não configurada no servidor' });
+                return res.status(500).json({ error: "Senha do Modo Pro não configurada no servidor" });
             }
             return res.status(200).json({ success: proToken === correctPassword });
         }
 
-        if (action !== 'chat') {
-            return res.status(400).json({ error: 'Ação não reconhecida' });
+        if (action !== "chat") {
+            return res.status(400).json({ error: "Ação não reconhecida" });
         }
 
         // Verificar API Key
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return res.status(500).json({ error: 'API Key do Gemini não configurada' });
+            return res.status(500).json({ error: "API Key do Gemini não configurada" });
         }
 
         // Verificar senha do Modo Pro se estiver ativo
         if (isPro) {
             const correctPassword = process.env.PRO_MODE_PASSWORD;
             if (!correctPassword || proToken !== correctPassword) {
-                return res.status(401).json({ error: 'Senha do Modo Pro incorreta' });
+                return res.status(401).json({ error: "Senha do Modo Pro incorreta" });
             }
         }
 
         // Selecionar modelo
-        const model = isPro ? 'gemini-1.5-pro-latest' : 'gemini-1.5-flash-latest';
-        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const model = isPro ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
+        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
 
         // Processar memórias com gestão inteligente de tokens
-        let memoryContext = '';
+        let memoryContext = "";
         let usedContextTopics = [];
         
         if (memories && memories.length > 0) {
-            // Calcular tokens para memórias que não têm
             const memoriesWithTokens = calculateMemoryTokens(memories);
-            
-            // Selecionar memórias relevantes
             const relevantMemories = selectRelevantMemories(memoriesWithTokens, prompt);
             
             if (relevantMemories.length > 0) {
                 memoryContext = formatMemoriesForContext(relevantMemories);
-                usedContextTopics = [...new Set(relevantMemories.flatMap(mem => mem.topics || ['geral']))];
+                usedContextTopics = [...new Set(relevantMemories.flatMap(mem => mem.topics || ["geral"]))];
             }
         }
 
@@ -290,28 +289,33 @@ export default async function handler(req, res) {
             });
         }
 
-        // Fazer chamada única à API do Gemini
+        // Configurar headers para streaming
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        // Fazer chamada de streaming à API do Gemini
         const response = await fetch(baseUrl, {
-            method: 'POST',
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
             body: JSON.stringify(geminiPayload)
         });
 
         if (!response.ok) {
             const errorData = await response.text();
-            console.error('Erro da API Gemini:', response.status, errorData);
+            console.error("Erro da API Gemini:", response.status, errorData);
             
             if (response.status === 429) {
                 return res.status(429).json({ 
-                    error: 'Muitas requisições. Aguarde alguns segundos e tente novamente.' 
+                    error: "Muitas requisições. Aguarde alguns segundos e tente novamente." 
                 });
             }
             
             if (response.status === 400) {
                 return res.status(400).json({ 
-                    error: 'Requisição inválida. Verifique o conteúdo da mensagem.' 
+                    error: "Requisição inválida. Verifique o conteúdo da mensagem." 
                 });
             }
             
@@ -320,24 +324,50 @@ export default async function handler(req, res) {
             });
         }
 
-        const result = await response.json();
-        
-        if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
-            console.error('Resposta inválida da API:', result);
-            return res.status(500).json({ error: 'Resposta inválida da API Gemini' });
+        let fullResponse = "";
+        let canvasContent = null;
+        const canvasBeginTag = "[CANVAS_BEGINS]";
+        const canvasEndTag = "[CANVAS_ENDS]";
+
+        // Processar stream de resposta
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split("\n");
+                
+                for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                                const text = data.candidates[0].content.parts[0].text;
+                                fullResponse += text;
+                                
+                                // Enviar chunk para o frontend
+                                res.write(`data: ${JSON.stringify({ type: "chunk", text })}\n\n`);
+                            }
+                        } catch (parseError) {
+                            // Ignorar linhas que não são JSON válido
+                        }
+                    }
+                }
+            }
+        } catch (streamError) {
+            console.error("Erro no streaming:", streamError);
+            res.write(`data: ${JSON.stringify({ type: "error", error: "Erro no streaming" })}\n\n`);
         }
 
-        const fullResponse = result.candidates[0].content.parts[0].text;
-
-        // Processar resposta para separar chat e canvas
-        const canvasBeginTag = '[CANVAS_BEGINS]';
-        const canvasEndTag = '[CANVAS_ENDS]';
-        
+        // Processar resposta final para separar chat e canvas
+        let aiResponse = fullResponse;
         const beginIndex = fullResponse.indexOf(canvasBeginTag);
         const endIndex = fullResponse.indexOf(canvasEndTag);
-        
-        let aiResponse = fullResponse;
-        let canvasContent = null;
         
         if (beginIndex !== -1 && endIndex !== -1 && endIndex > beginIndex) {
             aiResponse = fullResponse.substring(0, beginIndex).trim();
@@ -360,8 +390,8 @@ Retorne APENAS um JSON no formato:
 {"text": "resumo conciso da conversa em 1-2 frases", "topics": ["palavra-chave1", "palavra-chave2", "palavra-chave3"]}`;
 
                 const memoryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         contents: [{
                             parts: [{ text: memoryPrompt }]
@@ -377,39 +407,41 @@ Retorne APENAS um JSON no formato:
                     const memoryResult = await memoryResponse.json();
                     const memoryText = memoryResult.candidates[0].content.parts[0].text.trim();
                     
-                    // Extrair JSON da resposta
                     const jsonMatch = memoryText.match(/\{[^}]+\}/);
                     if (jsonMatch) {
                         try {
                             const memoryData = JSON.parse(jsonMatch[0]);
                             newMemory = {
                                 id: `mem-auto-${Date.now()}`,
-                                text: memoryData.text || 'Conversa resumida automaticamente',
-                                topics: Array.isArray(memoryData.topics) ? memoryData.topics.slice(0, 3) : ['conversa'],
-                                tokenCount: estimateTokens(memoryData.text || 'Conversa resumida automaticamente'),
+                                text: memoryData.text || "Conversa resumida automaticamente",
+                                topics: Array.isArray(memoryData.topics) ? memoryData.topics.slice(0, 3) : ["conversa"],
+                                tokenCount: estimateTokens(memoryData.text || "Conversa resumida automaticamente"),
                                 lastAccessed: Date.now()
                             };
                         } catch (parseError) {
-                            console.error('Erro ao parsear JSON da memória:', parseError);
+                            console.error("Erro ao parsear JSON da memória:", parseError);
                         }
                     }
                 }
             } catch (error) {
-                console.error('Erro ao gerar memória automática:', error);
+                console.error("Erro ao gerar memória automática:", error);
             }
         }
 
-        return res.status(200).json({
+        // Enviar dados finais
+        res.write(`data: ${JSON.stringify({
+            type: "complete",
             aiResponse,
             canvasContent,
             newMemory,
             usedContext: usedContextTopics
-        });
+        })}\n\n`);
+        
+        res.end();
 
     } catch (error) {
-        console.error('Erro no handler:', error);
-        return res.status(500).json({ 
-            error: 'Erro interno do servidor: ' + error.message 
-        });
+        console.error("Erro no handler:", error);
+        res.write(`data: ${JSON.stringify({ type: "error", error: "Erro interno do servidor: " + error.message })}\n\n`);
+        res.end();
     }
 }
