@@ -179,7 +179,7 @@
             opacity: 1; 
         }
         
-        .hidden { 
+        .panel-hidden { 
             display: none !important; 
         }
         
@@ -489,7 +489,7 @@
 <body class="flex flex-col h-screen antialiased">
     
     <!-- Estado Vazio (sem chats) -->
-    <div id="empty-state" class="empty-state hidden">
+    <div id="empty-state" class="empty-state panel-hidden">
         <div class="empty-state-container">
             <h1>Phoenix Chat</h1>
             <p>Bem-vindo ao seu assistente de IA pessoal</p>
@@ -498,8 +498,7 @@
     </div>
     
     <!-- Interface Principal -->
-    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden opacity-0 transition-opacity duration-500 hidden">
-
+    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden opacity-0">
         <!-- Barra Lateral Esquerda -->
         <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
             <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
@@ -527,7 +526,7 @@
         </div>
         
         <!-- Botão para reabrir a lista de chats -->
-        <button id="expand-chat-list-btn" class="hidden absolute top-2 left-2 z-20 p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Chats">
+        <button id="expand-chat-list-btn" class="panel-hidden absolute top-2 left-2 z-20 p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Chats">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
         </button>
         
@@ -646,7 +645,7 @@
     </div>
     
     <!-- Botão para expandir painel direito -->
-    <button id="expand-right-panel-btn" class="expand-right-panel-btn hidden p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Painel">
+    <button id="expand-right-panel-btn" class="expand-right-panel-btn panel-hidden p-2 bg-gray-700 rounded-md hover:bg-gray-600" title="Expandir Painel">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
     </button>
     
@@ -929,13 +928,13 @@
             const updateEmptyState = () => {
                 const hasChats = Object.keys(appState.chats).length > 0;
                 if (!hasChats) {
-                    elements.emptyState.classList.remove('hidden');
+                    elements.emptyState.classList.remove('panel-hidden');
                     elements.mainInterface.classList.add('opacity-0');
-                    elements.mainInterface.classList.add('hidden');
+                    elements.mainInterface.classList.add('panel-hidden');
                     appState.activeChatId = null;
                 } else {
-                    elements.emptyState.classList.add('hidden');
-                    elements.mainInterface.classList.remove('hidden');
+                    elements.emptyState.classList.add('panel-hidden');
+                    elements.mainInterface.classList.remove('panel-hidden');
                     setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
                     if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
                         appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
@@ -958,9 +957,9 @@
                 if (Object.keys(appState.chats).length === 1) {
                     elements.emptyState.classList.add('fade-out');
                     setTimeout(() => {
-                        elements.emptyState.classList.add('hidden');
-                        elements.mainInterface.classList.remove('opacity-0');
-                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 35);
+                        elements.emptyState.classList.add('panel-hidden');
+                        elements.mainInterface.classList.remove('panel-hidden');
+                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
                     }, 500);
                 }
                 
@@ -989,11 +988,11 @@
 
                 elements.chatMessages.innerHTML = '';
                 if (chat.history && chat.history.length > 0) {
-                    elements.chatPlaceholder.classList.add('hidden');
+                    elements.chatPlaceholder.classList.add('panel-hidden');
                     chat.history.forEach(msg => appendMessage(msg.text, msg.sender, msg.isPro, msg.usedContext, false));
                 } else {
                     chat.history = [];
-                    elements.chatPlaceholder.classList.remove('hidden');
+                    elements.chatPlaceholder.classList.remove('panel-hidden');
                 }
                 renderMemories();
                 renderCanvas(chat.canvasContent, false);
@@ -1055,7 +1054,7 @@
                 const chat = appState.chats[appState.activeChatId];
                 if (!chat) return;
 
-                elements.chatPlaceholder.classList.add('hidden');
+                elements.chatPlaceholder.classList.add('panel-hidden');
                 
                 const contentHTML = sender === 'user' 
                     ? DOMPurify.sanitize(text.replace(/</g, "&lt;").replace(/>/g, "&gt;")) 
@@ -1237,7 +1236,7 @@
                     details.open = searchTerm.length > 0;
 
                     const summary = document.createElement('summary');
-                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header'
+                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header';
                     const topicMemories = groupedByTopic[topic];
                     const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
                     let warningHTML = (totalChars > 5000) 
@@ -1373,7 +1372,7 @@
                         useDynamicPersona: appState.settings.dynamicPersona
                     };
                     
-                    const response = await fetch('/api/gemini_final_v2', {
+                    const response = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -1585,7 +1584,7 @@
                 const password = elements.proPasswordInput.value;
                 if (!password) return;
                 try {
-                    const response = await fetch('/api/gemini_final_v2', {
+                    const response = await fetch('/api/gemini', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'verifyPassword', proToken: password })
@@ -1709,7 +1708,7 @@
                 elements.notificationModal.classList.add('hidden');
             });
 
-            elements.confirmSave.addEventListener('click')
+            elements.confirmSave.addEventListener('click', saveMemory);
             elements.cancelSave.addEventListener('click', () => {
                 elements.memoryModal.classList.add('hidden');
             });
@@ -1781,12 +1780,12 @@
             
             elements.closeRightPanelBtn.addEventListener('click', () => {
                 elements.rightPanelContainer.classList.add('right-panel-collapsed');
-                elements.expandRightPanelBtn.classList.remove('hidden');
+                elements.expandRightPanelBtn.classList.remove('panel-hidden');
             });
 
             elements.expandRightPanelBtn.addEventListener('click', () => {
                 elements.rightPanelContainer.classList.remove('right-panel-collapsed');
-                elements.expandRightPanelBtn.classList.add('hidden');
+                elements.expandRightPanelBtn.classList.add('panel-hidden');
             });
 
             elements.addMemoryBtn.addEventListener('click', () => openMemoryModal());
@@ -1817,13 +1816,13 @@
             elements.userInput.addEventListener('drop', handleFileDrop);
 
             elements.collapseChatListBtn.addEventListener('click', () => {
-                elements.leftSidebar.classList.add('hidden');
-                elements.expandChatListBtn.classList.remove('hidden');
+                elements.leftSidebar.classList.add('panel-hidden');
+                elements.expandChatListBtn.classList.remove('panel-hidden');
             });
 
             elements.expandChatListBtn.addEventListener('click', () => {
-                elements.leftSidebar.classList.remove('hidden');
-                elements.expandChatListBtn.classList.add('hidden');
+                elements.leftSidebar.classList.remove('panel-hidden');
+                elements.expandChatListBtn.classList.add('panel-hidden');
             });
 
             // Canvas event listeners
