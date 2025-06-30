@@ -1236,7 +1236,7 @@
                     details.open = searchTerm.length > 0;
 
                     const summary = document.createElement('summary');
-                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header
+                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header'
                     const topicMemories = groupedByTopic[topic];
                     const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
                     let warningHTML = (totalChars > 5000) 
@@ -1708,7 +1708,7 @@
                 elements.notificationModal.classList.add('hidden');
             });
 
-            elements.confirmSave.addEventListener('click
+            elements.confirmSave.addEventListener('click')
             elements.cancelSave.addEventListener('click', () => {
                 elements.memoryModal.classList.add('hidden');
             });
