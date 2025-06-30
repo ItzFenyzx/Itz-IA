@@ -21,9 +21,18 @@
             --text-secondary: #495057;
             --border-color: #dee2e6; 
             --accent-pro: #fd7e14;
-            --empty-state-bg: #f0f2f5;
+            --empty-state-bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             --canvas-bg: #ffffff;
             --canvas-border: #e0e0e0;
+            --chat-bubble-ai-bg: #e9ecef;
+            --chat-bubble-ai-text: #212529;
+            --chat-bubble-user-bg: #3b82f6;
+            --chat-bubble-user-text: #ffffff;
+            --chat-bubble-pro-bg: #fffbeb;
+            --chat-bubble-pro-text: #92400e;
+            --chat-bubble-pro-border: #fbbF04;
+            --harmony-color-1: #667eea;
+            --harmony-color-2: #764ba2;
         }
         
         .dark {
@@ -34,13 +43,22 @@
             --text-secondary: #9aa0a6;
             --border-color: #4a4a4e; 
             --accent-pro: #fbbc04;
-            --empty-state-bg: #0f1011;
+            --empty-state-bg: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
             --canvas-bg: #1a1a1a;
             --canvas-border: #333333;
+            --chat-bubble-ai-bg: #35363a;
+            --chat-bubble-ai-text: #e8eaed;
+            --chat-bubble-user-bg: #3b82f6;
+            --chat-bubble-user-text: #ffffff;
+            --chat-bubble-pro-bg: #4a3c1a;
+            --chat-bubble-pro-text: #fef08a;
+            --chat-bubble-pro-border: #fbbc04;
+            --harmony-color-1: #667eea;
+            --harmony-color-2: #764ba2;
         }
 
         * { 
-            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; 
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, opacity 0.3s ease; 
         }
         
         body { 
@@ -50,29 +68,26 @@
             overflow-y: auto;
         }
         
-        .empty-state { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .dark .empty-state {
-            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        #empty-state {
+            background: var(--empty-state-bg);
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
         }
         
         .chat-bubble-user { 
-            background-color: #3b82f6; 
-            color: white; 
+            background-color: var(--chat-bubble-user-bg); 
+            color: var(--chat-bubble-user-text); 
         }
         
         .chat-bubble-ai { 
-            background-color: var(--bg-tertiary); 
-            color: var(--text-primary); 
+            background-color: var(--chat-bubble-ai-bg); 
+            color: var(--chat-bubble-ai-text); 
         }
         
         .chat-bubble-ai-pro { 
-            background-color: #4a3c1a; 
-            border: 1px solid var(--accent-pro); 
-            color: #fef08a; 
+            background-color: var(--chat-bubble-pro-bg); 
+            border: 1px solid var(--chat-bubble-pro-border); 
+            color: var(--chat-bubble-pro-text); 
         }
         
         .markdown-content h1, .markdown-content h2, .markdown-content h3 { 
@@ -424,7 +439,7 @@
             font-size: 3rem;
             font-weight: bold;
             margin-bottom: 1rem;
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background: linear-gradient(45deg, var(--harmony-color-1), var(--harmony-color-2));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -437,7 +452,7 @@
         }
 
         .empty-state-container button {
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background: linear-gradient(45deg, var(--harmony-color-1), var(--harmony-color-2));
             color: white;
             border: none;
             padding: 1rem 2rem;
@@ -450,6 +465,24 @@
 
         .empty-state-container button:hover {
             transform: translateY(-2px);
+        }
+
+        .fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .fade-in {
+            opacity: 1;
+        }
+        
+        .drag-over {
+            border: 2px dashed var(--harmony-color-1) !important;
+            background-color: rgba(102, 126, 234, 0.1) !important;
+        }
+        
+        .dark .drag-over {
+            background-color: rgba(102, 126, 234, 0.2) !important;
         }
     </style>
 </head>
@@ -465,7 +498,7 @@
     </div>
     
     <!-- Interface Principal -->
-    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden">
+    <div id="main-interface" class="flex flex-row flex-1 overflow-hidden opacity-0">
         <!-- Barra Lateral Esquerda -->
         <div id="left-sidebar" class="flex flex-col w-64 bg-[var(--bg-secondary)] flex-shrink-0">
             <div id="chat-list-panel" class="flex flex-col flex-grow p-2">
@@ -539,7 +572,7 @@
                                 <textarea id="userInput" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-xl focus:outline-none focus:border-indigo-500 p-3 pr-12 text-[var(--text-primary)] resize-none" placeholder="Digite sua mensagem..." rows="1"></textarea>
                             </div>
                             <button id="sendButton" class="p-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0">
-                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="w-6 h-6 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
                                 </svg>
                             </button>
@@ -569,7 +602,7 @@
                 
                 <div id="memory-panel" class="flex-grow flex-col flex">
                     <div class="p-2 flex space-x-2 items-center justify-between">
-                        <input type="text" id="memorySearch" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Buscar...">
+                        <input type="text" id="memorySearch" autocomplete="off" class="w-full border border-[var(--border-color)] bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Buscar...">
                         <button id="addMemoryBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Add</button>
                     </div>
                     <div class="p-2 flex space-x-1">
@@ -709,7 +742,7 @@
         <div class="bg-[#2d2d30] p-6 rounded-lg shadow-xl w-1/3 text-gray-200">
             <h3 class="text-lg font-bold mb-4">Ativar Modo Pro</h3>
             <p class="text-sm text-gray-400 mb-4">Digite a senha para usar o modelo Pro.</p>
-            <input type="password" id="proPasswordInput" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Senha...">
+            <input type="password" id="proPasswordInput" autocomplete="new-password" class="w-full border border-gray-600 bg-[var(--bg-tertiary)] rounded-lg p-2 mb-4" placeholder="Senha...">
             <div class="flex justify-end space-x-2">
                 <button id="cancelPassword" class="px-4 py-2 bg-gray-600 rounded-lg">Cancelar</button>
                 <button id="confirmPassword" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Verificar</button>
@@ -873,11 +906,11 @@
 
             const saveState = () => {
                 const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v20', JSON.stringify(stateToSave));
+                localStorage.setItem('phoenixChatState_v22', JSON.stringify(stateToSave));
             };
 
             const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v20');
+                const savedState = localStorage.getItem('phoenixChatState_v22');
                 if (savedState) {
                     const parsedState = JSON.parse(savedState);
                     parsedState.settings = { ...appState.settings, ...parsedState.settings };
@@ -896,11 +929,13 @@
                 const hasChats = Object.keys(appState.chats).length > 0;
                 if (!hasChats) {
                     elements.emptyState.classList.remove('panel-hidden');
+                    elements.mainInterface.classList.add('opacity-0');
                     elements.mainInterface.classList.add('panel-hidden');
                     appState.activeChatId = null;
                 } else {
                     elements.emptyState.classList.add('panel-hidden');
                     elements.mainInterface.classList.remove('panel-hidden');
+                    setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
                     if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
                         appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
                     }
@@ -918,8 +953,16 @@
                     memories: [], 
                     canvasContent: '' 
                 };
-                elements.emptyState.classList.add('panel-hidden');
-                elements.mainInterface.classList.remove('panel-hidden');
+                
+                if (Object.keys(appState.chats).length === 1) {
+                    elements.emptyState.classList.add('fade-out');
+                    setTimeout(() => {
+                        elements.emptyState.classList.add('panel-hidden');
+                        elements.mainInterface.classList.remove('panel-hidden');
+                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
+                    }, 500);
+                }
+                
                 if (save) { 
                     switchChat(newChatId); 
                 } else {
@@ -1072,6 +1115,7 @@
                     }
                     saveState();
                 }
+                return messageWrapper;
             };
 
             const renderCanvas = (content, shouldSave = true) => {
@@ -1192,8 +1236,7 @@
                     details.open = searchTerm.length > 0;
 
                     const summary = document.createElement('summary');
-                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header';
-                    
+                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header
                     const topicMemories = groupedByTopic[topic];
                     const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
                     let warningHTML = (totalChars > 5000) 
@@ -1255,16 +1298,39 @@
                 elements.fileInput.value = '';
             };
 
-            const showLoadingIndicator = (show = true) => {
-                const existing = document.getElementById('loading-indicator');
-                if (existing) existing.remove();
-                if (show) {
-                    const loadingHTML = `<div id="loading-indicator" class="chat-message"><div class="flex items-start"><div class="flex flex-col space-y-2 text-md max-w-lg mx-2 order-2 items-start"><div><span class="px-4 py-2 rounded-lg inline-block rounded-bl-none chat-bubble-ai">Pensando...</span></div></div><img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI profile" class="w-8 h-8 rounded-full order-1"></div></div>`;
-                    elements.chatMessages.innerHTML += loadingHTML;
-                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            const handleFileDrop = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                elements.userInput.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    handleFileAttachment(file);
                 }
             };
-            
+
+            const handleFileAttachment = (file) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Data = e.target.result.split(',')[1];
+                    attachedFile = {
+                        type: file.type,
+                        data: base64Data
+                    };
+                    
+                    elements.attachmentPreview.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <img src="${e.target.result}" alt="Preview" class="w-16 h-16 object-cover rounded">
+                            <span class="text-sm">${file.name}</span>
+                            <button id="removeAttachment" class="text-red-500 hover:text-red-700">&times;</button>
+                        </div>
+                    `;
+                    elements.attachmentPreview.classList.remove('hidden');
+                    
+                    document.getElementById('removeAttachment').addEventListener('click', clearAttachment);
+                };
+                reader.readAsDataURL(file);
+            };
+
             const handleSend = async () => {
                 if (!appState.activeChatId) {
                     createNewChat();
@@ -1287,7 +1353,10 @@
                 } : null;
                 
                 clearAttachment();
-                showLoadingIndicator();
+                
+                const aiMessageWrapper = appendMessage('', 'ai', appState.settings.isProMode, [], false);
+                const aiContentDiv = aiMessageWrapper.querySelector('.markdown-content');
+                aiContentDiv.innerHTML = '<span class="blinking-cursor"></span>';
 
                 try {
                     const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
@@ -1303,13 +1372,12 @@
                         useDynamicPersona: appState.settings.dynamicPersona
                     };
                     
-                    const response = await fetch('/api/gemini', {
+                    const response = await fetch('/api/gemini_final_v2', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                     
-                    showLoadingIndicator(false);
                     if (!response.ok) {
                         const errorData = await response.json();
                         if (response.status === 401) { 
@@ -1319,27 +1387,60 @@
                         throw new Error(errorData.error || 'Falha na resposta do backend');
                     }
 
-                    const result = await response.json();
-                    
-                    appendMessage(result.aiResponse, 'ai', appState.settings.isProMode, result.usedContext);
-                    
-                    if (result.canvasContent && result.canvasContent.trim()) {
-                        renderCanvas(result.canvasContent);
-                        if (appState.activeRightPanelView !== 'canvas') {
-                            switchView('canvas');
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let fullResponse = '';
+                    let finalData = null;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n');
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    if (data.type === 'chunk') {
+                                        fullResponse += data.text;
+                                        aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse + '<span class="blinking-cursor"></span>'));
+                                        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                                    } else if (data.type === 'complete') {
+                                        finalData = data;
+                                    } else if (data.type === 'error') {
+                                        throw new Error(data.error);
+                                    }
+                                } catch (e) {
+                                    // ignore parse errors
+                                }
+                            }
                         }
+                    }
+                    
+                    aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse));
+                    
+                    if (finalData) {
+                        chat.history.push({ text: fullResponse, sender: 'ai', isPro: appState.settings.isProMode, usedContext: finalData.usedContext });
+                        if (finalData.canvasContent && finalData.canvasContent.trim()) {
+                            renderCanvas(finalData.canvasContent);
+                            if (appState.activeRightPanelView !== 'canvas') {
+                                switchView('canvas');
+                            }
+                        }
+                        if (finalData.newMemory) {
+                            chat.memories.push(finalData.newMemory);
+                            saveState();
+                            if (appState.activeMemoryView === 'chat') {
+                                renderMemories();
+                            }
+                        }
+                        saveState();
                     }
 
-                    if (result.newMemory) {
-                        chat.memories.push(result.newMemory);
-                        saveState();
-                        if (appState.activeMemoryView === 'chat') {
-                            renderMemories();
-                        }
-                    }
                 } catch (error) {
-                    showLoadingIndicator(false);
-                    appendMessage(`**Erro:** ${error.message}`, 'ai');
+                    aiContentDiv.innerHTML = `<span class="text-red-500">**Erro:** ${error.message}</span>`;
                 }
             };
             
@@ -1483,7 +1584,7 @@
                 const password = elements.proPasswordInput.value;
                 if (!password) return;
                 try {
-                    const response = await fetch('/api/gemini', {
+                    const response = await fetch('/api/gemini_final_v2', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'verifyPassword', proToken: password })
@@ -1607,7 +1708,7 @@
                 elements.notificationModal.classList.add('hidden');
             });
 
-            elements.confirmSave.addEventListener('click', saveMemory);
+            elements.confirmSave.addEventListener('click
             elements.cancelSave.addEventListener('click', () => {
                 elements.memoryModal.classList.add('hidden');
             });
@@ -1697,28 +1798,22 @@
             elements.fileInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (file && file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const base64Data = e.target.result.split(',')[1];
-                        attachedFile = {
-                            type: file.type,
-                            data: base64Data
-                        };
-                        
-                        elements.attachmentPreview.innerHTML = `
-                            <div class="flex items-center space-x-2">
-                                <img src="${e.target.result}" alt="Preview" class="w-16 h-16 object-cover rounded">
-                                <span class="text-sm">${file.name}</span>
-                                <button id="removeAttachment" class="text-red-500 hover:text-red-700">&times;</button>
-                            </div>
-                        `;
-                        elements.attachmentPreview.classList.remove('hidden');
-                        
-                        document.getElementById('removeAttachment').addEventListener('click', clearAttachment);
-                    };
-                    reader.readAsDataURL(file);
+                    handleFileAttachment(file);
                 }
             });
+
+            // Drag and Drop
+            elements.userInput.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                elements.userInput.classList.add('drag-over');
+            });
+            elements.userInput.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                elements.userInput.classList.remove('drag-over');
+            });
+            elements.userInput.addEventListener('drop', handleFileDrop);
 
             elements.collapseChatListBtn.addEventListener('click', () => {
                 elements.leftSidebar.classList.add('panel-hidden');
