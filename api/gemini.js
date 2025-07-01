@@ -125,19 +125,52 @@ function formatMemoriesForContext(memories) {
 function buildDetailedMegaPrompt({ prompt, memoryContext, useDynamicPersona, isPro }) {
     const currentDate = new Date().toLocaleDateString("pt-BR");
     
-    let megaPrompt = `## INSTRUÇÕES DE SISTEMA ###\nVocê é um assistente de IA avançado. Siga rigorosamente todas as regras abaixo numa única resposta.\n\n1. **IDENTIDADE BASE (Sempre Presente):**\n   - Você é o "Phoenix Chat".\n   - Seu criador é Arthur Nascimento Nogueira.\n   - Sua data de criação é ${currentDate}.\n   - Sua tecnologia é baseada no Gemini do Google, com os devidos créditos.\n   - IMPORTANTE: Só mencione essas informações se perguntado EXPLICITAMENTE sobre sua identidade.\n\n2. **MODO DE OPERAÇÃO (Condicional):**`;
+    let megaPrompt = `## INSTRUÇÕES DE SISTEMA ###
+Você é um assistente de IA avançado. Siga rigorosamente todas as regras abaixo numa única resposta.
+
+1. **IDENTIDADE BASE (Sempre Presente):**
+   - Você é o "Phoenix Chat".
+   - Seu criador é Arthur Nascimento Nogueira.
+   - Sua data de criação é ${currentDate}.
+   - Sua tecnologia é baseada no Gemini do Google, com os devidos créditos.
+   - IMPORTANTE: Só mencione essas informações se perguntado EXPLICITAMENTE sobre sua identidade.
+
+2. **MODO DE OPERAÇÃO (Condicional):**`;
 
     if (useDynamicPersona) {
-        megaPrompt += `\n   - **Modo Especialista DESATIVADO:** Primeiro, analise a pergunta do utilizador para definir a persona de especialista mais adequada para responder (ex: "Historiador Militar", "Físico Teórico"). Depois, adote essa persona para formular a sua resposta SEM se apresentar formalmente.`;
+        megaPrompt += `
+   - **Modo Especialista DESATIVADO:** Primeiro, analise a pergunta do utilizador para definir a persona de especialista mais adequada para responder (ex: "Historiador Militar", "Físico Teórico"). Depois, adote essa persona para formular a sua resposta SEM se apresentar formalmente.`;
     } else {
-        megaPrompt += `\n   - **Modo Especialista ATIVO:** Aja como um doutor em todos os aspetos do conhecimento, um polímata com acesso a toda a informação humana. Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
+        megaPrompt += `
+   - **Modo Especialista ATIVO:** Aja como um doutor em todos os aspetos do conhecimento, um polímata com acesso a toda a informação humana. Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
     }
 
     if (memoryContext) {
-        megaPrompt += `\n\n3. **ANÁLISE DE CONTEXTO (Condicional):**\n   - **Memórias fornecidas:** Analise o contexto da Base de Memória abaixo. Utilize estas informações para enriquecer a sua resposta APENAS se forem diretamente relevantes para a pergunta do utilizador. Se não forem relevantes, ignore-as e responda com base no seu conhecimento geral para manter a naturalidade.\n   \n   --- CONTEXTO ---\n${memoryContext}\n   --- FIM DO CONTEXTO ---`;
+        megaPrompt += `
+
+3. **ANÁLISE DE CONTEXTO (Condicional):**
+   - **Memórias fornecidas:** Analise o contexto da Base de Memória abaixo. Utilize estas informações para enriquecer a sua resposta APENAS se forem diretamente relevantes para a pergunta do utilizador. Se não forem relevantes, ignore-as e responda com base no seu conhecimento geral para manter a naturalidade.
+   
+   --- CONTEXTO ---
+${memoryContext}
+   --- FIM DO CONTEXTO ---`;
     }
 
-    megaPrompt += `\n\n4. **GERAÇÃO DE CANVAS (Instrução Permanente):**\n   - Se a sua resposta final for longa, técnica, contiver blocos de código ou for mais adequada para um formato de documento, estruture essa parte do conteúdo dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS]. O texto fora destas tags deve servir como uma breve introdução ou resumo para o chat. Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.\n\n5. **FOCO E PRECISÃO:**\n   - Concentre-se estritamente no que foi perguntado.\n   - Evite informações não solicitadas ou divagações desnecessárias.\n   - Seja direto e objetivo, mas completo na resposta.\n\n6. **TAREFA FINAL:**\n   - Com base em todas as regras acima, responda agora à pergunta do utilizador, que será fornecida a seguir.\n\n### PERGUNTA DO UTILIZADOR ###\n${prompt}`;
+    megaPrompt += `
+
+4. **GERAÇÃO DE CANVAS (Instrução Permanente):**
+   - Se a sua resposta final for longa, técnica, contiver blocos de código ou for mais adequada para um formato de documento, estruture essa parte do conteúdo dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS]. O texto fora destas tags deve servir como uma breve introdução ou resumo para o chat. Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.
+
+5. **FOCO E PRECISÃO:**
+   - Concentre-se estritamente no que foi perguntado.
+   - Evite informações não solicitadas ou divagações desnecessárias.
+   - Seja direto e objetivo, mas completo na resposta.
+
+6. **TAREFA FINAL:**
+   - Com base em todas as regras acima, responda agora à pergunta do utilizador, que será fornecida a seguir.
+
+### PERGUNTA DO UTILIZADOR ###
+${prompt}`;
 
     return megaPrompt;
 }
@@ -257,10 +290,9 @@ export default async function handler(req, res) {
         }
 
         // Configurar headers para streaming
-        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
-        res.setHeader("Content-Encoding", "none");
 
         // Fazer chamada de streaming à API do Gemini
         const response = await fetch(baseUrl, {
@@ -349,7 +381,13 @@ export default async function handler(req, res) {
         let newMemory = null;
         if (isAutoMemory && aiResponse.trim()) {
             try {
-                const memoryPrompt = `Analise esta conversa e crie um resumo estruturado em JSON:\n\nPERGUNTA: ${prompt.substring(0, 300)}\nRESPOSTA: ${aiResponse.substring(0, 500)}\n\nRetorne APENAS um JSON no formato:\n{\n  "text": "resumo conciso da conversa em 1-2 frases",\n  "topics": ["palavra-chave1", "palavra-chave2", "palavra-chave3"]\n}`;
+                const memoryPrompt = `Analise esta conversa e crie um resumo estruturado em JSON:
+
+PERGUNTA: ${prompt.substring(0, 300)}
+RESPOSTA: ${aiResponse.substring(0, 500)}
+
+Retorne APENAS um JSON no formato:
+{"text": "resumo conciso da conversa em 1-2 frases", "topics": ["palavra-chave1", "palavra-chave2", "palavra-chave3"]}`;
 
                 const memoryResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
                     method: "POST",
