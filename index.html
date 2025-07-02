@@ -805,1116 +805,1079 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            let appState = {
-                activeChatId: null,
-                chats: {},
-                globalMemories: [],
-                settings: {
+    let appState = {
+        activeChatId: null,
+        chats: {},
+        globalMemories: [],
+        settings: {
+            theme: 'dark',
+            dynamicPersona: true,
+            isProMode: false,
+            proModeToken: null,
+            autoMemory: false
+        },
+        activeRightPanelView: 'memory',
+        activeMemoryView: 'global',
+        isGenerating: false,
+    };
+
+    let abortController = new AbortController();
+
+    const elements = {
+        body: document.body,
+        emptyState: document.getElementById('empty-state'),
+        mainInterface: document.getElementById('main-interface'),
+        leftSidebar: document.getElementById('left-sidebar'),
+        mainContainer: document.getElementById('main-container'),
+        mainChatPanel: document.getElementById('main-chat-panel'),
+        rightPanelContainer: document.getElementById('right-panel-container'),
+        chatMessages: document.getElementById('chat-messages'),
+        chatPlaceholder: document.getElementById('chat-placeholder'),
+        userInput: document.getElementById('userInput'),
+        sendButton: document.getElementById('sendButton'),
+        stopButton: document.getElementById('stopButton'),
+        attachmentPreview: document.getElementById('attachment-preview-container'),
+        createFirstChatBtn: document.getElementById('create-first-chat-btn'),
+        newChatBtn: document.getElementById('newChatBtn'),
+        collapseChatListBtn: document.getElementById('collapse-chat-list-btn'),
+        expandChatListBtn: document.getElementById('expand-chat-list-btn'),
+        proModeBtn: document.getElementById('proModeBtn'),
+        viewMemoryBtn: document.getElementById('view-memory-btn'),
+        viewCanvasBtn: document.getElementById('view-canvas-btn'),
+        closeRightPanelBtn: document.getElementById('close-right-panel-btn'),
+        expandRightPanelBtn: document.getElementById('expand-right-panel-btn'),
+        attachFileBtn: document.getElementById('attachFileBtn'),
+        fileInput: document.getElementById('file-input'),
+        viewGlobalMemoryBtn: document.getElementById('view-global-memory-btn'),
+        viewChatMemoryBtn: document.getElementById('view-chat-memory-btn'),
+        passwordModal: document.getElementById('passwordModal'),
+        proPasswordInput: document.getElementById('proPasswordInput'),
+        confirmPassword: document.getElementById('confirmPassword'),
+        cancelPassword: document.getElementById('cancelPassword'),
+        notificationModal: document.getElementById('notificationModal'),
+        notificationMessage: document.getElementById('notificationMessage'),
+        closeNotification: document.getElementById('closeNotification'),
+        memoryModal: document.getElementById('memoryModal'),
+        memoryText: document.getElementById('memoryText'),
+        memoryTopics: document.getElementById('memoryTopics'),
+        isGlobalMemory: document.getElementById('isGlobalMemory'),
+        cancelSave: document.getElementById('cancelSave'),
+        confirmSave: document.getElementById('confirmSave'),
+        confirmModal: document.getElementById('confirmModal'),
+        confirmMessage: document.getElementById('confirmMessage'),
+        cancelConfirm: document.getElementById('cancelConfirm'),
+        doConfirm: document.getElementById('doConfirm'),
+        renameModal: document.getElementById('renameModal'),
+        renameInput: document.getElementById('renameInput'),
+        confirmRename: document.getElementById('confirmRename'),
+        cancelRename: document.getElementById('cancelRename'),
+        renameTopicModal: document.getElementById('renameTopicModal'),
+        renameTopicInput: document.getElementById('renameTopicInput'),
+        confirmRenameTopic: document.getElementById('confirmRenameTopic'),
+        cancelRenameTopic: document.getElementById('cancelRenameTopic'),
+        settingsModal: document.getElementById('settingsModal'),
+        settingsBtn: document.getElementById('settings-btn'),
+        closeSettings: document.getElementById('closeSettings'),
+        themeToggle: document.getElementById('theme-toggle'),
+        autoMemoryToggle: document.getElementById('auto-memory-toggle-input'),
+        dynamicPersonaToggle: document.getElementById('dynamic-persona-toggle-input'),
+        canvasResizer: document.getElementById('canvas-resizer'),
+        canvasFileType: document.getElementById('canvas-file-type'),
+        canvasLineCount: document.getElementById('canvas-line-count'),
+        canvasCopyBtn: document.getElementById('canvas-copy-btn'),
+        canvasDownloadBtn: document.getElementById('canvas-download-btn'),
+        canvasClearBtn: document.getElementById('canvas-clear-btn'),
+        addMemoryBtn: document.getElementById('addMemoryBtn'),
+        memorySearch: document.getElementById('memorySearch'),
+        mainTitle: document.getElementById('main-title'),
+        memoryContainer: document.getElementById('memory-container'),
+        canvasContent: document.getElementById('canvas-content'),
+        chatListContainer: document.getElementById('chat-list-container'),
+    };
+    
+    let attachedFile = null;
+    let confirmCallback = null;
+    let renameCallback = null;
+    let renameTopicCallback = null;
+    let isResizing = false;
+
+    function buildDetailedMegaPrompt({ prompt, memoryContext, useDynamicPersona }) {
+        const currentDate = new Date().toLocaleDateString("pt-BR");
+        return `## INSTRUÇÕES DE SISTEMA ###
+        Você é um assistente de IA avançado chamado "Phoenix Chat". Seu criador é Arthur Nascimento Nogueira.
+        Sua tecnologia é baseada no Gemini do Google. Responda em português do Brasil.
+        Hoje é ${currentDate}.
+        
+        ${useDynamicPersona 
+            ? `Analise a pergunta do usuário para definir a persona de especialista mais adequada e responda como tal, sem se apresentar.`
+            : `Aja como um polímata, um especialista em todos os campos do conhecimento, fornecendo respostas profundas e detalhadas.`
+        }
+        
+        ${memoryContext 
+            ? `Use o CONTEXTO DE MEMÓRIA abaixo APENAS SE for relevante para a pergunta. Caso contrário, ignore-o.\n--- CONTEXTO DE MEMÓRIA ---\n${memoryContext}\n--- FIM DO CONTEXTO ---`
+            : ''
+        }
+        
+        Se a resposta final for longa, técnica ou contiver código, estruture essa parte do conteúdo dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS]. O texto fora destas tags deve servir como uma breve introdução ou resumo para o chat. Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.
+        
+        Responda agora à pergunta do usuário:
+        ### PERGUNTA DO UTILIZADOR ###
+        ${prompt}`;
+    }
+
+    function selectRelevantMemories(memories, prompt) {
+        if (!memories || memories.length === 0) return [];
+        const promptLower = prompt.toLowerCase();
+        return memories.filter(mem => 
+            mem.text.toLowerCase().includes(promptLower) ||
+            (mem.topics || []).some(topic => promptLower.includes(topic))
+        );
+    }
+
+    function formatMemoriesForContext(memories) {
+         if (!memories || memories.length === 0) return "";
+        return memories.map(mem => `- Tópicos: [${(mem.topics || ['geral']).join(', ')}]: ${mem.text}`).join("\n");
+    }
+
+    const initCanvasResizer = () => {
+        let startX, startWidth;
+        
+        const startResize = (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = elements.rightPanelContainer.offsetWidth;
+            document.body.classList.add('canvas-resizing');
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+            e.preventDefault();
+        };
+        
+        const doResize = (e) => {
+            if (!isResizing) return;
+            
+            const deltaX = startX - e.clientX;
+            const newWidth = startWidth + deltaX;
+            const minWidth = 384;
+            const maxWidth = window.innerWidth * 0.6;
+            
+            const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+            
+            elements.rightPanelContainer.style.width = clampedWidth + 'px';
+            appState.rightPanelWidth = clampedWidth;
+            saveState();
+        };
+        
+        const stopResize = () => {
+            isResizing = false;
+            document.body.classList.remove('canvas-resizing');
+            document.removeEventListener('mousemove', doResize);
+            document.removeEventListener('mouseup', stopResize);
+        };
+        
+        elements.canvasResizer.addEventListener('mousedown', startResize);
+    };
+
+    const saveState = () => {
+        const stateToSave = { ...appState, proModeToken: null };
+        localStorage.setItem('phoenixChatState_v28', JSON.stringify(stateToSave));
+    };
+
+    const loadState = () => {
+        const savedState = localStorage.getItem('phoenixChatState_v28');
+        if (savedState) {
+            try {
+                const parsedState = JSON.parse(savedState);
+                // Merge settings to avoid losing new default properties
+                const defaultSettings = {
                     theme: 'dark',
                     dynamicPersona: true,
                     isProMode: false,
                     proModeToken: null,
                     autoMemory: false
-                },
-                activeRightPanelView: 'memory',
-                activeMemoryView: 'global',
-                isCanvasMode: false,
-                rightPanelWidth: 384
-            };
-
-            const elements = {
-                body: document.body,
-                emptyState: document.getElementById('empty-state'),
-                mainInterface: document.getElementById('main-interface'),
-                leftSidebar: document.getElementById('left-sidebar'),
-                mainContainer: document.getElementById('main-container'),
-                mainChatPanel: document.getElementById('main-chat-panel'),
-                rightPanelContainer: document.getElementById('right-panel-container'),
-                chatMessages: document.getElementById('chat-messages'),
-                chatPlaceholder: document.getElementById('chat-placeholder'),
-                memoryPanel: document.getElementById('memory-panel'),
-                canvasPanel: document.getElementById('canvas-panel'),
-                canvasContent: document.getElementById('canvas-content'),
-                memoryContainer: document.getElementById('memory-container'),
-                chatListContainer: document.getElementById('chat-list-container'),
-                userInput: document.getElementById('userInput'),
-                attachmentPreview: document.getElementById('attachment-preview-container'),
-                
-                createFirstChatBtn: document.getElementById('create-first-chat-btn'),
-                newChatBtn: document.getElementById('newChatBtn'),
-                collapseChatListBtn: document.getElementById('collapse-chat-list-btn'),
-                expandChatListBtn: document.getElementById('expand-chat-list-btn'),
-                sendButton: document.getElementById('sendButton'),
-                proModeBtn: document.getElementById('proModeBtn'),
-                viewMemoryBtn: document.getElementById('view-memory-btn'),
-                viewCanvasBtn: document.getElementById('view-canvas-btn'),
-                closeRightPanelBtn: document.getElementById('close-right-panel-btn'),
-                expandRightPanelBtn: document.getElementById('expand-right-panel-btn'),
-                attachFileBtn: document.getElementById('attachFileBtn'),
-                fileInput: document.getElementById('file-input'),
-                
-                viewGlobalMemoryBtn: document.getElementById('view-global-memory-btn'),
-                viewChatMemoryBtn: document.getElementById('view-chat-memory-btn'),
-                
-                passwordModal: document.getElementById('passwordModal'),
-                proPasswordInput: document.getElementById('proPasswordInput'),
-                confirmPassword: document.getElementById('confirmPassword'),
-                cancelPassword: document.getElementById('cancelPassword'),
-                notificationModal: document.getElementById('notificationModal'),
-                notificationMessage: document.getElementById('notificationMessage'),
-                closeNotification: document.getElementById('closeNotification'),
-                
-                memoryModal: document.getElementById('memoryModal'),
-                memoryText: document.getElementById('memoryText'),
-                memoryTopics: document.getElementById('memoryTopics'),
-                isGlobalMemory: document.getElementById('isGlobalMemory'),
-                cancelSave: document.getElementById('cancelSave'),
-                confirmSave: document.getElementById('confirmSave'),
-                
-                confirmModal: document.getElementById('confirmModal'),
-                confirmMessage: document.getElementById('confirmMessage'),
-                cancelConfirm: document.getElementById('cancelConfirm'),
-                doConfirm: document.getElementById('doConfirm'),
-                
-                renameModal: document.getElementById('renameModal'),
-                renameInput: document.getElementById('renameInput'),
-                confirmRename: document.getElementById('confirmRename'),
-                cancelRename: document.getElementById('cancelRename'),
-                
-                renameTopicModal: document.getElementById('renameTopicModal'),
-                renameTopicInput: document.getElementById('renameTopicInput'),
-                confirmRenameTopic: document.getElementById('confirmRenameTopic'),
-                cancelRenameTopic: document.getElementById('cancelRenameTopic'),
-                
-                settingsModal: document.getElementById('settingsModal'),
-                settingsBtn: document.getElementById('settings-btn'),
-                closeSettings: document.getElementById('closeSettings'),
-                themeToggle: document.getElementById('theme-toggle'),
-                autoMemoryToggle: document.getElementById('auto-memory-toggle-input'),
-                dynamicPersonaToggle: document.getElementById('dynamic-persona-toggle-input'),
-                
-                canvasResizer: document.getElementById('canvas-resizer'),
-                canvasFileType: document.getElementById('canvas-file-type'),
-                canvasLineCount: document.getElementById('canvas-line-count'),
-                canvasCopyBtn: document.getElementById('canvas-copy-btn'),
-                canvasDownloadBtn: document.getElementById('canvas-download-btn'),
-                canvasClearBtn: document.getElementById('canvas-clear-btn'),
-                
-                addMemoryBtn: document.getElementById('addMemoryBtn'),
-                memorySearch: document.getElementById('memorySearch'),
-                mainTitle: document.getElementById('main-title')
-            };
-            
-            let attachedFile = null;
-            let confirmCallback = null;
-            let renameCallback = null;
-            let renameTopicCallback = null;
-            let isResizing = false;
-
-            // Funcionalidade de redimensionamento do Canvas
-            const initCanvasResizer = () => {
-                let startX, startWidth;
-                
-                const startResize = (e) => {
-                    isResizing = true;
-                    startX = e.clientX;
-                    startWidth = elements.rightPanelContainer.offsetWidth;
-                    document.body.classList.add('canvas-resizing');
-                    document.addEventListener('mousemove', doResize);
-                    document.addEventListener('mouseup', stopResize);
-                    e.preventDefault();
                 };
-                
-                const doResize = (e) => {
-                    if (!isResizing) return;
-                    
-                    const deltaX = startX - e.clientX;
-                    const newWidth = startWidth + deltaX;
-                    const minWidth = 384;
-                    const maxWidth = window.innerWidth * 0.6;
-                    
-                    const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-                    
-                    elements.rightPanelContainer.style.width = clampedWidth + 'px';
-                    appState.rightPanelWidth = clampedWidth;
-                    saveState();
-                };
-                
-                const stopResize = () => {
-                    isResizing = false;
-                    document.body.classList.remove('canvas-resizing');
-                    document.removeEventListener('mousemove', doResize);
-                    document.removeEventListener('mouseup', stopResize);
-                };
-                
-                elements.canvasResizer.addEventListener('mousedown', startResize);
-            };
-
-            const saveState = () => {
-                const stateToSave = { ...appState, proModeToken: null };
-                localStorage.setItem('phoenixChatState_v22', JSON.stringify(stateToSave));
-            };
-
-            const loadState = () => {
-                const savedState = localStorage.getItem('phoenixChatState_v22');
-                if (savedState) {
-                    const parsedState = JSON.parse(savedState);
-                    parsedState.settings = { ...appState.settings, ...parsedState.settings };
-                    appState = { ...appState, ...parsedState };
-                }
-                
-                if (appState.rightPanelWidth) {
-                    elements.rightPanelContainer.style.width = appState.rightPanelWidth + 'px';
-                }
-                
-                updateEmptyState();
-                applySettings();
-            };
-            
-            const updateEmptyState = () => {
-                const hasChats = Object.keys(appState.chats).length > 0;
-                if (!hasChats) {
-                    elements.emptyState.classList.remove('panel-hidden');
-                    elements.mainInterface.classList.add('opacity-0');
-                    elements.mainInterface.classList.add('panel-hidden');
-                    appState.activeChatId = null;
-                } else {
-                    elements.emptyState.classList.add('panel-hidden');
-                    elements.mainInterface.classList.remove('panel-hidden');
-                    setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
-                    if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
-                        appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
-                    }
-                    loadChat(appState.activeChatId);
-                }
-                renderChatList();
-            };
-            
-            const createNewChat = (save = true) => {
-                const newChatId = `chat-${Date.now()}`;
-                appState.chats[newChatId] = { 
-                    id: newChatId, 
-                    name: "Novo Chat", 
-                    history: [], 
-                    memories: [], 
-                    canvasContent: '' 
-                };
-                
-                if (Object.keys(appState.chats).length === 1) {
-                    elements.emptyState.classList.add('fade-out');
-                    setTimeout(() => {
-                        elements.emptyState.classList.add('panel-hidden');
-                        elements.mainInterface.classList.remove('panel-hidden');
-                        setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
-                    }, 500);
-                }
-                
-                if (save) { 
-                    switchChat(newChatId); 
-                } else {
-                    appState.activeChatId = newChatId;
-                    updateEmptyState();
-                }
-            };
-
-            const switchChat = (chatId) => {
-                if (!appState.chats[chatId] || appState.activeChatId === chatId) return;
-                appState.activeChatId = chatId;
-                saveState();
-                renderChatList();
-                loadChat(chatId);
-            };
-
-            const loadChat = (chatId) => {
-                const chat = appState.chats[chatId];
-                if (!chat) {
-                    updateEmptyState();
-                    return;
-                }
-
-                elements.chatMessages.innerHTML = '';
-                if (chat.history && chat.history.length > 0) {
-                    elements.chatPlaceholder.classList.add('panel-hidden');
-                    chat.history.forEach(msg => appendMessage(msg.text, msg.sender, msg.isPro, msg.usedContext, false));
-                } else {
-                    chat.history = [];
-                    elements.chatPlaceholder.classList.remove('panel-hidden');
-                }
-                renderMemories();
-                renderCanvas(chat.canvasContent, false);
-                setProUI(appState.settings.isProMode && appState.settings.proModeToken);
-                clearAttachment();
-            };
-
-            const deleteChat = (chatId) => {
-                delete appState.chats[chatId];
-                if (appState.activeChatId === chatId) { 
-                    appState.activeChatId = null; 
-                }
-                saveState(); 
-                updateEmptyState();
-            };
-
-            const renameChat = (chatId, newName) => {
-                if (appState.chats[chatId] && newName) {
-                    appState.chats[chatId].name = newName;
-                    saveState();
-                    renderChatList();
-                }
-            };
-            
-            const renderChatList = () => {
-                elements.chatListContainer.innerHTML = '';
-                const chats = Object.values(appState.chats).sort((a,b) => b.id.split('-')[1] - a.id.split('-')[1]);
-                
-                if (chats.length === 0) {
-                    elements.chatListContainer.innerHTML = '<div class="p-4 text-center text-[var(--text-secondary)] text-sm">Nenhum chat criado ainda.</div>';
-                    return;
-                }
-                
-                chats.forEach(chat => {
-                    const isActive = chat.id === appState.activeChatId;
-                    const item = document.createElement('div');
-                    item.className = `chat-list-item p-2 my-1 rounded-md cursor-pointer hover:bg-[var(--bg-tertiary)] flex justify-between items-center group ${isActive ? 'active' : ''}`;
-                    item.innerHTML = `
-                        <span class="flex-grow truncate" title="${chat.name}">${chat.name}</span> 
-                        <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
-                            <button class="rename-chat-btn p-1 hover:text-blue-400" title="Renomear">&#9998;</button>
-                            <button class="delete-chat-btn p-1 hover:text-red-400 text-lg" title="Apagar">&times;</button>
-                        </div>
-                    `;
-                    item.addEventListener('click', (e) => { 
-                        if (!e.target.closest('button')) switchChat(chat.id); 
-                    });
-                    item.querySelector('.rename-chat-btn').addEventListener('click', () => {
-                        showRenameModal(chat.id, chat.name);
-                    });
-                    item.querySelector('.delete-chat-btn').addEventListener('click', () => { 
-                        showConfirmationModal(`Tem certeza que deseja apagar o chat "${chat.name}"?`, () => deleteChat(chat.id)); 
-                    });
-                    elements.chatListContainer.appendChild(item);
-                });
-            };
-
-            const appendMessage = (text, sender, proResponse = false, usedContext = [], shouldSave = true) => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat) return;
-
-                elements.chatPlaceholder.classList.add('panel-hidden');
-                
-                const contentHTML = sender === 'user' 
-                    ? DOMPurify.sanitize(text.replace(/</g, "&lt;").replace(/>/g, "&gt;")) 
-                    : DOMPurify.sanitize(marked.parse(text));
-                
-                const messageWrapper = document.createElement('div');
-                messageWrapper.className = 'chat-message';
-                
-                let bubbleClass = 'chat-bubble-ai';
-                if (sender === 'user') { 
-                    bubbleClass = 'chat-bubble-user'; 
-                } else if (proResponse) { 
-                    bubbleClass = 'chat-bubble-ai-pro'; 
-                }
-
-                const alignment = sender === 'user' ? 'items-end' : 'items-start';
-                const order = sender === 'user' ? 'order-2 items-end' : 'order-2 items-start';
-                const avatar = sender === 'user' 
-                    ? `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` 
-                    : `<img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
-                
-                const saveButtonHTML = (sender === 'ai' && text.trim()) 
-                    ? `<button class="save-memory-btn mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>` 
-                    : '';
-                const contextHTML = (usedContext && usedContext.length > 0 && sender === 'ai') 
-                    ? `<div class="text-xs text-[var(--text-secondary)] mt-2 border-t border-[var(--border-color)] pt-1">Contexto usado: ${usedContext.join(', ')}</div>` 
-                    : '';
-                
-                messageWrapper.innerHTML = `
-                    <div class="flex ${alignment}">
-                        <div class="flex flex-col space-y-2 text-md max-w-3xl mx-2 ${order}">
-                            <div>
-                                <div class="px-4 py-2 rounded-lg inline-block ${sender === 'user' ? 'rounded-br-none' : 'rounded-bl-none'} ${bubbleClass}">
-                                    <div class="markdown-content">${contentHTML}</div>
-                                    ${contextHTML}
-                                </div>
-                                ${saveButtonHTML}
-                            </div>
-                        </div>
-                        ${avatar}
-                    </div>`;
-                
-                elements.chatMessages.appendChild(messageWrapper);
-                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-
-                if (sender === 'ai' && text.trim()) {
-                    const saveBtn = messageWrapper.querySelector('.save-memory-btn');
-                    if (saveBtn) {
-                        saveBtn.addEventListener('click', () => openMemoryModal(text));
-                    }
-                }
-
-                if (shouldSave) {
-                    chat.history.push({ text, sender, isPro: proResponse, usedContext });
-                    if (chat.history.length === 1 && sender === 'user') {
-                        const newName = text.substring(0, 25) + (text.length > 25 ? '...' : '');
-                        renameChat(chat.id, newName);
-                    }
-                    saveState();
-                }
-                return messageWrapper;
-            };
-
-            const renderCanvas = (content, shouldSave = true) => {
-                const chat = appState.chats[appState.activeChatId];
-                if(!chat) return;
-                
-                if (!content || content.trim() === '') {
-                    elements.canvasContent.innerHTML = `
-                        <div class="canvas-empty-state">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                            <h3>Canvas Vazio</h3>
-                            <p>Conteúdo técnico e documentos aparecerão aqui automaticamente</p>
-                        </div>
-                    `;
-                    elements.canvasFileType.textContent = '📄 Documento';
-                    elements.canvasLineCount.textContent = '0 linhas';
-                } else {
-                    // Detectar tipo de arquivo
-                    let fileType = '📄 Documento';
-                    if (content.includes('```javascript') || content.includes('```js')) fileType = '🟨 JavaScript';
-                    else if (content.includes('```python') || content.includes('```py')) fileType = '🐍 Python';
-                    else if (content.includes('```html')) fileType = '🌐 HTML';
-                    else if (content.includes('```css')) fileType = '🎨 CSS';
-                    else if (content.includes('```json')) fileType = '📋 JSON';
-                    else if (content.includes('```')) fileType = '💻 Código';
-                    
-                    // Contar linhas
-                    const lineCount = content.split('\n').length;
-                    
-                    // Renderizar como documento estilizado
-                    const parsedContent = DOMPurify.sanitize(marked.parse(content));
-                    
-                    elements.canvasContent.innerHTML = `
-                        <div class="canvas-document">
-                            <div class="canvas-document-header">
-                                <h3 class="font-bold text-lg">${fileType}</h3>
-                                <span class="text-sm text-[var(--text-secondary)]">${lineCount} linhas</span>
-                            </div>
-                            <div class="canvas-document-content">
-                                ${parsedContent}
-                            </div>
-                        </div>
-                    `;
-                    
-                    elements.canvasFileType.textContent = fileType;
-                    elements.canvasLineCount.textContent = `${lineCount} linhas`;
-                    
-                    // Aplicar syntax highlighting se Prism estiver disponível
-                    if (typeof Prism !== 'undefined') {
-                        Prism.highlightAllUnder(elements.canvasContent);
-                    }
-                }
-                
-                if (shouldSave) {
-                    chat.canvasContent = content;
-                    saveState();
-                }
-            };
-
-            const getCurrentMemories = () => {
-                if (appState.activeMemoryView === 'global') {
-                    return appState.globalMemories;
-                } else {
-                    const chat = appState.chats[appState.activeChatId];
-                    return chat ? chat.memories : [];
-                }
-            };
-
-            const moveMemoryToGlobal = (memoryId) => {
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat) return;
-                
-                const memoryIndex = chat.memories.findIndex(mem => mem.id === memoryId);
-                if (memoryIndex !== -1) {
-                    const memory = chat.memories.splice(memoryIndex, 1)[0];
-                    memory.id = `mem-global-${Date.now()}`;
-                    appState.globalMemories.push(memory);
-                    saveState();
-                    renderMemories();
-                    showNotification('Memória movida para o escopo global.');
-                }
-            };
-
-            const renderMemories = () => {
-                const memories = getCurrentMemories();
-                const isGlobal = appState.activeMemoryView === 'global';
-                
-                if (!memories || memories.length === 0) {
-                    elements.memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória salva.</div>`;
-                    return;
-                }
-
-                elements.memoryContainer.innerHTML = '';
-                const searchTerm = elements.memorySearch.value.toLowerCase();
-                
-                const filteredMemories = memories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
-
-                const groupedByTopic = filteredMemories.reduce((acc, mem) => {
-                    (mem.topics || []).forEach(topic => {
-                        if (!acc[topic]) acc[topic] = [];
-                        acc[topic].push(mem);
-                    });
-                    return acc;
-                }, {});
-
-                const sortedTopics = Object.keys(groupedByTopic).sort();
-
-                if (sortedTopics.length === 0) {
-                    elements.memoryContainer.innerHTML = `<div class="p-4 text-center text-gray-500 text-sm">Nenhuma memória encontrada.</div>`;
-                    return;
-                }
-
-                sortedTopics.forEach(topic => {
-                    const details = document.createElement('details');
-                    details.className = 'p-2';
-                    details.open = searchTerm.length > 0;
-
-                    const summary = document.createElement('summary');
-                    summary.className = 'font-bold text-lg cursor-pointer p-2 bg-gray-700 rounded-lg flex justify-between items-center memory-topic-header';
-                    const topicMemories = groupedByTopic[topic];
-                    const totalChars = topicMemories.reduce((sum, mem) => sum + mem.text.length, 0);
-                    let warningHTML = (totalChars > 5000) 
-                        ? `<span class="text-yellow-400" title="Tópico grande. Considere dividi-lo.">⚠️</span>` 
-                        : '';
-                    summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span> <div class="flex items-center space-x-2">${warningHTML}<button class="rename-topic-btn p-1 hover:text-blue-400 text-xs" title="Renomear Tópico">&#9998;</button><button class="delete-topic-btn p-1 hover:text-red-400 text-xs" title="Apagar Tópico">&times;</button></div>`;
-                    
-                    const topicContent = document.createElement('div');
-                    topicContent.className = 'pl-4 pt-2';
-
-                    topicMemories.forEach(mem => {
-                        const memEl = document.createElement('div');
-                        memEl.className = 'memory-item p-3 mb-2 bg-gray-800 border-l-4 border-yellow-500 rounded-r-lg shadow-sm';
-                        
-                        const moveButtonHTML = !isGlobal 
-                            ? `<button class="move-to-global-btn" data-id="${mem.id}" title="Mover para Global">🌐</button>` 
-                            : '';
-                        
-                        memEl.innerHTML = `
-                            <p class="text-sm text-gray-300">${mem.text}</p>
-                            <div class="flex justify-between items-center mt-2">
-                                <button class="delete-memory-btn text-xs text-red-500 hover:text-red-400 font-semibold" data-id="${mem.id}">Excluir</button>
-                                ${moveButtonHTML}
-                            </div>
-                        `;
-                        topicContent.appendChild(memEl);
-                    });
-                    
-                    details.appendChild(summary);
-                    details.appendChild(topicContent);
-                    elements.memoryContainer.appendChild(details);
-
-                    summary.querySelector('.rename-topic-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        showRenameTopicModal(topic);
-                    });
-
-                    summary.querySelector('.delete-topic-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        showConfirmationModal(`Tem certeza que deseja apagar o tópico "${topic}" e todas as suas memórias?`, () => deleteTopic(topic));
-                    });
-                });
-
-                elements.memoryContainer.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('delete-memory-btn')) {
-                        const memoryId = e.target.getAttribute('data-id');
-                        showConfirmationModal('Tem certeza que deseja excluir esta memória?', () => deleteMemory(memoryId));
-                    } else if (e.target.classList.contains('move-to-global-btn')) {
-                        const memoryId = e.target.getAttribute('data-id');
-                        moveMemoryToGlobal(memoryId);
-                    }
-                });
-            };
-            
-            const clearAttachment = () => {
-                attachedFile = null;
-                elements.attachmentPreview.innerHTML = '';
-                elements.attachmentPreview.classList.add('hidden');
-                elements.fileInput.value = '';
-            };
-
-            const handleFileDrop = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                elements.userInput.classList.remove('drag-over');
-                const file = e.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    handleFileAttachment(file);
-                }
-            };
-
-            const handleFileAttachment = (file) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const base64Data = e.target.result.split(',')[1];
-                    attachedFile = {
-                        type: file.type,
-                        data: base64Data
-                    };
-                    
-                    elements.attachmentPreview.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <img src="${e.target.result}" alt="Preview" class="w-16 h-16 object-cover rounded">
-                            <span class="text-sm">${file.name}</span>
-                            <button id="removeAttachment" class="text-red-500 hover:text-red-700">&times;</button>
-                        </div>
-                    `;
-                    elements.attachmentPreview.classList.remove('hidden');
-                    
-                    document.getElementById('removeAttachment').addEventListener('click', clearAttachment);
-                };
-                reader.readAsDataURL(file);
-            };
-
-            const handleSend = async () => {
-                if (!appState.activeChatId) {
-                    createNewChat();
-                }
-                
-                const chat = appState.chats[appState.activeChatId];
-                if (!chat) return;
-
-                const query = elements.userInput.value.trim();
-                if (!query && !attachedFile) return;
-
-                appendMessage(query, 'user');
-                elements.userInput.value = '';
-                elements.userInput.style.height = 'auto';
-                elements.userInput.classList.remove('has-scroll');
-
-                const imagePayload = attachedFile ? {
-                    mimeType: attachedFile.type,
-                    data: attachedFile.data
-                } : null;
-                
-                clearAttachment();
-                
-                const aiMessageWrapper = appendMessage('', 'ai', appState.settings.isProMode, [], false);
-                const aiContentDiv = aiMessageWrapper.querySelector('.markdown-content');
-                aiContentDiv.innerHTML = '<span class="blinking-cursor"></span>';
-
-                try {
-                    const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
-                    
-                    const payload = { 
-                        action: 'chat',
-                        prompt: query, 
-                        isPro: appState.settings.isProMode, 
-                        proToken: appState.settings.proModeToken,
-                        isAutoMemory: appState.settings.autoMemory,
-                        memories: allMemories,
-                        image: imagePayload,
-                        useDynamicPersona: appState.settings.dynamicPersona
-                    };
-                    
-                    const response = await fetch('/api/gemini', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        if (response.status === 401) { 
-                            setProUI(false); 
-                            showNotification("Senha do Modo Pro incorreta."); 
-                        }
-                        throw new Error(errorData.error || 'Falha na resposta do backend');
-                    }
-
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let fullResponse = '';
-                    let finalData = null;
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n');
-
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6));
-                                    if (data.type === 'chunk') {
-                                        fullResponse += data.text;
-                                        aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse + '<span class="blinking-cursor"></span>'));
-                                        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-                                    } else if (data.type === 'complete') {
-                                        finalData = data;
-                                    } else if (data.type === 'error') {
-                                        throw new Error(data.error);
-                                    }
-                                } catch (e) {
-                                    // ignore parse errors
-                                }
-                            }
-                        }
-                    }
-                    
-                    aiContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullResponse));
-                    
-                    if (finalData) {
-                        chat.history.push({ text: fullResponse, sender: 'ai', isPro: appState.settings.isProMode, usedContext: finalData.usedContext });
-                        if (finalData.canvasContent && finalData.canvasContent.trim()) {
-                            renderCanvas(finalData.canvasContent);
-                            if (appState.activeRightPanelView !== 'canvas') {
-                                switchView('canvas');
-                            }
-                        }
-                        if (finalData.newMemory) {
-                            chat.memories.push(finalData.newMemory);
-                            saveState();
-                            if (appState.activeMemoryView === 'chat') {
-                                renderMemories();
-                            }
-                        }
-                        saveState();
-                    }
-
-                } catch (error) {
-                    aiContentDiv.innerHTML = `<span class="text-red-500">**Erro:** ${error.message}</span>`;
-                }
-            };
-            
-            const switchView = (view) => {
-                appState.activeRightPanelView = view;
-                const isMemory = view === 'memory';
-                elements.memoryPanel.classList.toggle('hidden', !isMemory);
-                elements.memoryPanel.classList.toggle('flex', isMemory);
-                elements.canvasPanel.classList.toggle('hidden', isMemory);
-                elements.canvasPanel.classList.toggle('flex', !isMemory);
-                elements.viewMemoryBtn.classList.toggle('active', isMemory);
-                elements.viewCanvasBtn.classList.toggle('active', !isMemory);
-                
-                if (!isMemory) {
-                    elements.body.classList.add('canvas-mode');
-                } else {
-                    elements.body.classList.remove('canvas-mode');
-                }
-                
-                saveState();
-            };
-
-            const switchMemoryView = (view) => {
-                appState.activeMemoryView = view;
-                const isGlobal = view === 'global';
-                elements.viewGlobalMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
-                elements.viewChatMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${!isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
-                renderMemories();
-                saveState();
-            };
-            
-            const showConfirmationModal = (message, onConfirm) => {
-                elements.confirmMessage.textContent = message;
-                confirmCallback = onConfirm;
-                elements.confirmModal.classList.remove('hidden');
-            };
-
-            const showNotification = (message) => {
-                elements.notificationMessage.textContent = message;
-                elements.notificationModal.classList.remove('hidden');
-            };
-            
-            const openMemoryModal = (rawText = null) => {
-                elements.memoryText.value = rawText || '';
-                elements.memoryTopics.value = '';
-                elements.isGlobalMemory.checked = appState.activeMemoryView === 'global';
-                elements.memoryModal.classList.remove('hidden');
-                elements.memoryText.focus();
-            };
-
-            const saveMemory = () => {
-                const text = elements.memoryText.value.trim();
-                const topics = elements.memoryTopics.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-                const isGlobal = elements.isGlobalMemory.checked;
-                
-                if (!text || topics.length === 0) { 
-                    alert('Texto e tópico são obrigatórios.'); 
-                    return; 
-                }
-                
-                const newMemory = { 
-                    id: `mem-${Date.now()}`, 
-                    text, 
-                    topics,
-                    tokenCount: Math.ceil(text.length / 4),
-                    lastAccessed: Date.now()
-                };
-                
-                if (isGlobal) {
-                    appState.globalMemories.push(newMemory);
-                } else {
-                    if (!appState.activeChatId) createNewChat();
-                    const chat = appState.chats[appState.activeChatId];
-                    if (chat) {
-                        if (!chat.memories) chat.memories = [];
-                        chat.memories.push(newMemory);
-                    }
-                }
-                
-                saveState();
-                renderMemories();
-                elements.memoryModal.classList.add('hidden');
-            };
-            
-            const deleteMemory = (memoryId) => {
-                const memories = getCurrentMemories();
-                const index = memories.findIndex(mem => mem.id === memoryId);
-                if (index !== -1) {
-                    memories.splice(index, 1);
-                    saveState();
-                    renderMemories();
-                }
-            };
-
-            const deleteTopic = (topicName) => {
-                const memories = getCurrentMemories();
-                memories.forEach(mem => { 
-                    mem.topics = mem.topics.filter(t => t !== topicName); 
-                });
-                const filteredMemories = memories.filter(mem => mem.topics.length > 0);
-                
-                if (appState.activeMemoryView === 'global') {
-                    appState.globalMemories = filteredMemories;
-                } else {
-                    const chat = appState.chats[appState.activeChatId];
-                    if (chat) {
-                        chat.memories = filteredMemories;
-                    }
-                }
-                
-                saveState();
-                renderMemories();
-            };
-
-            const renameTopic = (oldName, newName) => {
-                if (!newName || newName.trim() === '') return;
-                
-                const memories = getCurrentMemories();
-                memories.forEach(mem => {
-                    mem.topics = mem.topics.map(t => t === oldName ? newName.toLowerCase() : t);
-                });
-                
-                saveState();
-                renderMemories();
-            };
-
-            const setProUI = (active) => {
-                appState.settings.isProMode = active;
-                elements.mainTitle.textContent = active ? "Phoenix Chat (PRO)" : "Phoenix Chat";
-                const svg = elements.proModeBtn.querySelector('svg');
-                if (active) { 
-                    svg.classList.add('text-yellow-400'); 
-                } else { 
-                    svg.classList.remove('text-yellow-400'); 
-                    appState.settings.proModeToken = null; 
-                }
-                saveState();
-            };
-
-            const verifyPassword = async () => {
-                const password = elements.proPasswordInput.value;
-                if (!password) return;
-                try {
-                    const response = await fetch('/api/gemini', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'verifyPassword', proToken: password })
-                    });
-                    const result = await response.json();
-                    elements.passwordModal.classList.add('hidden');
-                    elements.proPasswordInput.value = '';
-                    if (result.success) {
-                        appState.settings.proModeToken = password;
-                        setProUI(true);
-                        showNotification("Modo Pro ativado com sucesso!");
-                    } else {
-                        setProUI(false);
-                        showNotification("Senha incorreta.");
-                    }
-                } catch (e) {
-                    elements.passwordModal.classList.add('hidden');
-                    elements.proPasswordInput.value = '';
-                    showNotification("Erro ao verificar a senha.");
-                }
-            };
-            
-            const applySettings = () => {
-                if(appState.settings.theme === 'dark'){
-                    document.documentElement.classList.add('dark'); // Corrigido para document.documentElement
-                    elements.themeToggle.checked = true;
-                } else {
-                    document.documentElement.classList.remove('dark');
-                    elements.themeToggle.checked = false;
-                }
-                elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
-                elements.autoMemoryToggle.checked = appState.settings.autoMemory;
-                switchView(appState.activeRightPanelView || 'memory');
-                switchMemoryView(appState.activeMemoryView || 'global');
-            };
-
-            const showRenameModal = (chatId, currentName) => {
-                elements.renameInput.value = currentName;
-                renameCallback = (newName) => renameChat(chatId, newName);
-                elements.renameModal.classList.remove('hidden');
-                elements.renameInput.focus();
-            };
-
-            const showRenameTopicModal = (currentName) => {
-                elements.renameTopicInput.value = currentName;
-                renameTopicCallback = (newName) => renameTopic(currentName, newName);
-                elements.renameTopicModal.classList.remove('hidden');
-                elements.renameTopicInput.focus();
-            };
-
-            // Canvas functions
-            const copyCanvasContent = () => {
-                const chat = appState.chats[appState.activeChatId];
-                if (chat && chat.canvasContent) {
-                    navigator.clipboard.writeText(chat.canvasContent).then(() => {
-                        showNotification('Conteúdo copiado para a área de transferência!');
-                    });
-                }
-            };
-
-            const downloadCanvasContent = () => {
-                const chat = appState.chats[appState.activeChatId];
-                if (chat && chat.canvasContent) {
-                    const blob = new Blob([chat.canvasContent], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `canvas-${Date.now()}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                }
-            };
-
-            const clearCanvasContent = () => {
-                showConfirmationModal('Tem certeza que deseja limpar o Canvas?', () => {
-                    renderCanvas('');
-                });
-            };
-
-            // Event Listeners
-            elements.createFirstChatBtn.addEventListener('click', () => createNewChat());
-            elements.newChatBtn.addEventListener('click', () => createNewChat());
-            elements.sendButton.addEventListener('click', handleSend);
-            elements.userInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                }
-            });
-
-            elements.userInput.addEventListener('input', () => {
-                const textarea = elements.userInput;
-                textarea.style.height = 'auto';
-                const newHeight = Math.min(textarea.scrollHeight, 200);
-                textarea.style.height = newHeight + 'px';
-                
-                // Só mostrar scrollbar se necessário
-                if (textarea.scrollHeight > 200) {
-                    textarea.classList.add('has-scroll');
-                } else {
-                    textarea.classList.remove('has-scroll');
-                }
-            });
-
-            elements.proModeBtn.addEventListener('click', () => {
-                if (appState.settings.isProMode) {
-                    setProUI(false);
-                } else {
-                    elements.passwordModal.classList.remove('hidden');
-                    elements.proPasswordInput.focus();
-                }
-            });
-
-            elements.confirmPassword.addEventListener('click', verifyPassword);
-            elements.cancelPassword.addEventListener('click', () => {
-                elements.passwordModal.classList.add('hidden');
-                elements.proPasswordInput.value = '';
-            });
-
-            elements.closeNotification.addEventListener('click', () => {
-                elements.notificationModal.classList.add('hidden');
-            });
-
-            elements.confirmSave.addEventListener('click', saveMemory);
-            elements.cancelSave.addEventListener('click', () => {
-                elements.memoryModal.classList.add('hidden');
-            });
-
-            elements.doConfirm.addEventListener('click', () => {
-                if (confirmCallback) confirmCallback();
-                elements.confirmModal.classList.add('hidden');
-                confirmCallback = null;
-            });
-            elements.cancelConfirm.addEventListener('click', () => {
-                elements.confirmModal.classList.add('hidden');
-                confirmCallback = null;
-            });
-
-            elements.confirmRename.addEventListener('click', () => {
-                const newName = elements.renameInput.value.trim();
-                if (newName && renameCallback) {
-                    renameCallback(newName);
-                }
-                elements.renameModal.classList.add('hidden');
-                renameCallback = null;
-            });
-            elements.cancelRename.addEventListener('click', () => {
-                elements.renameModal.classList.add('hidden');
-                renameCallback = null;
-            });
-
-            elements.confirmRenameTopic.addEventListener('click', () => {
-                const newName = elements.renameTopicInput.value.trim();
-                if (newName && renameTopicCallback) {
-                    renameTopicCallback(newName);
-                }
-                elements.renameTopicModal.classList.add('hidden');
-                renameTopicCallback = null;
-            });
-            elements.cancelRenameTopic.addEventListener('click', () => {
-                elements.renameTopicModal.classList.add('hidden');
-                renameTopicCallback = null;
-            });
-
-            elements.settingsBtn.addEventListener('click', () => {
-                elements.settingsModal.classList.remove('hidden');
-            });
-            elements.closeSettings.addEventListener('click', () => {
-                elements.settingsModal.classList.add('hidden');
-            });
-
-            elements.themeToggle.addEventListener('change', () => {
-                appState.settings.theme = elements.themeToggle.checked ? 'dark' : 'light';
-                applySettings();
-                saveState();
-            });
-
-            elements.autoMemoryToggle.addEventListener('change', () => {
-                appState.settings.autoMemory = elements.autoMemoryToggle.checked;
-                saveState();
-            });
-
-            elements.dynamicPersonaToggle.addEventListener('change', () => {
-                appState.settings.dynamicPersona = elements.dynamicPersonaToggle.checked;
-                saveState();
-            });
-
-            elements.viewMemoryBtn.addEventListener('click', () => switchView('memory'));
-            elements.viewCanvasBtn.addEventListener('click', () => switchView('canvas'));
-            
-            elements.viewGlobalMemoryBtn.addEventListener('click', () => switchMemoryView('global'));
-            elements.viewChatMemoryBtn.addEventListener('click', () => switchMemoryView('chat'));
-            
-            elements.closeRightPanelBtn.addEventListener('click', () => {
-                elements.rightPanelContainer.classList.add('right-panel-collapsed');
-                elements.expandRightPanelBtn.classList.remove('panel-hidden');
-            });
-
-            elements.expandRightPanelBtn.addEventListener('click', () => {
-                elements.rightPanelContainer.classList.remove('right-panel-collapsed');
-                elements.expandRightPanelBtn.classList.add('panel-hidden');
-            });
-
-            elements.addMemoryBtn.addEventListener('click', () => openMemoryModal());
-            elements.memorySearch.addEventListener('input', renderMemories);
-
-            elements.attachFileBtn.addEventListener('click', () => {
-                elements.fileInput.click();
-            });
-
-            elements.fileInput.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    handleFileAttachment(file);
-                }
-            });
-
-            // Drag and Drop
-            elements.userInput.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                elements.userInput.classList.add('drag-over');
-            });
-            elements.userInput.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                elements.userInput.classList.remove('drag-over');
-            });
-            elements.userInput.addEventListener('drop', handleFileDrop);
-
-            elements.collapseChatListBtn.addEventListener('click', () => {
-                elements.leftSidebar.classList.add('panel-hidden');
-                elements.expandChatListBtn.classList.remove('panel-hidden');
-            });
-
-            elements.expandChatListBtn.addEventListener('click', () => {
-                elements.leftSidebar.classList.remove('panel-hidden');
-                elements.expandChatListBtn.classList.add('panel-hidden');
-            });
-
-            // Canvas event listeners
-            elements.canvasCopyBtn.addEventListener('click', copyCanvasContent);
-            elements.canvasDownloadBtn.addEventListener('click', downloadCanvasContent);
-            elements.canvasClearBtn.addEventListener('click', clearCanvasContent);
-
-            // Inicializar redimensionamento do Canvas
-            initCanvasResizer();
-            
-            loadState();
-        });
-        // Obtém a referência para o botão de alternar tema UMA ÚNICA VEZ
-const toggleThemeButton = document.getElementById('toggle-theme-button');
-
-// --- Lógica para aplicar o tema salvo ao carregar a página ---
-// Executa esta lógica assim que o DOM (estrutura da página) estiver pronto
-document.addEventListener('DOMContentLoaded', () => {
-    const savedTheme = localStorage.getItem('theme');
-    const body = document.body; // Obtém a referência para o body aqui também
-
-    if (savedTheme === 'light') {
-        // Se o tema salvo for "light", adiciona a classe
-        body.classList.add('light-mode-active');
-    }
-    // Se não houver tema salvo ou for "dark", o body não terá a classe light-mode-active,
-    // mantendo o tema escuro (se for o seu padrão).
-});
-
-// --- Lógica para alternar o tema ao clicar no botão e salvar a preferência ---
-// Verifica se o botão existe antes de adicionar o listener
-if (toggleThemeButton) {
-    toggleThemeButton.addEventListener('click', () => {
-        const body = document.body; // Obtém a referência para o body
-
-        // Alterna a classe 'light-mode-active' no body
-        body.classList.toggle('light-mode-active');
-
-        // Salva a preferência no Local Storage
-        if (body.classList.contains('light-mode-active')) {
-            localStorage.setItem('theme', 'light');
+                parsedState.settings = { ...defaultSettings, ...parsedState.settings };
+                appState = { ...appState, ...parsedState };
+            } catch (e) {
+                console.error("Falha ao analisar o estado salvo, redefinindo:", e);
+                localStorage.removeItem('phoenixChatState_v28');
+            }
+        }
+        
+        if (appState.rightPanelWidth) {
+            elements.rightPanelContainer.style.width = appState.rightPanelWidth + 'px';
+        }
+        
+        updateEmptyState();
+        applySettings();
+    };
+    
+    const updateEmptyState = () => {
+        const hasChats = Object.keys(appState.chats).length > 0;
+        elements.emptyState.classList.toggle('panel-hidden', hasChats);
+        elements.mainInterface.classList.toggle('panel-hidden', !hasChats);
+        if(hasChats) {
+            elements.mainInterface.classList.remove('opacity-0');
+        }
+
+        if (!hasChats) {
+            appState.activeChatId = null;
+        } else if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
+            appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
+        }
+        
+        if (appState.activeChatId) {
+            loadChat(appState.activeChatId);
+        }
+        renderChatList();
+    };
+    
+    const createNewChat = () => {
+        const newChatId = `chat-${Date.now()}`;
+        appState.chats[newChatId] = { 
+            id: newChatId, 
+            name: "Novo Chat", 
+            history: [], 
+            memories: [], 
+            canvasContent: '' 
+        };
+        
+        if (Object.keys(appState.chats).length === 1) {
+             updateEmptyState();
+        }
+        
+        switchChat(newChatId); 
+    };
+
+    const switchChat = (chatId) => {
+        if (!appState.chats[chatId] || appState.activeChatId === chatId || appState.isGenerating) return;
+        appState.activeChatId = chatId;
+        saveState();
+        renderChatList();
+        loadChat(chatId);
+    };
+
+    const loadChat = (chatId) => {
+        const chat = appState.chats[chatId];
+        if (!chat) {
+            updateEmptyState();
+            return;
+        }
+
+        elements.chatMessages.innerHTML = '';
+        if (chat.history && chat.history.length > 0) {
+            elements.chatPlaceholder.classList.add('panel-hidden');
+            chat.history.forEach(msg => appendMessage(msg));
         } else {
-            localStorage.setItem('theme', 'dark');
+            chat.history = [];
+            elements.chatPlaceholder.classList.remove('panel-hidden');
+        }
+        renderMemories();
+        renderCanvas(chat.canvasContent, false);
+        setProUI(appState.settings.isProMode && appState.settings.proModeToken);
+        clearAttachment();
+    };
+
+    const deleteChat = (chatId) => {
+        showConfirmationModal(`Tem certeza que deseja apagar o chat "${appState.chats[chatId].name}"?`, () => {
+            delete appState.chats[chatId];
+            if (appState.activeChatId === chatId) { 
+                const chatIds = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1]);
+                appState.activeChatId = chatIds[0] || null;
+            }
+            saveState(); 
+            updateEmptyState();
+        });
+    };
+
+    const renameChat = (chatId, newName) => {
+        if (appState.chats[chatId] && newName) {
+            appState.chats[chatId].name = newName;
+            saveState();
+            renderChatList();
+        }
+    };
+    
+    const renderChatList = () => {
+        elements.chatListContainer.innerHTML = '';
+        const chats = Object.values(appState.chats).sort((a,b) => b.id.split('-')[1] - a.id.split('-')[1]);
+        
+        if (chats.length === 0) {
+            elements.chatListContainer.innerHTML = '<div class="p-4 text-center text-[var(--text-secondary)] text-sm">Nenhum chat criado.</div>';
+            return;
+        }
+        
+        chats.forEach(chat => {
+            const isActive = chat.id === appState.activeChatId;
+            const item = document.createElement('div');
+            item.className = `chat-list-item p-2 my-1 rounded-md cursor-pointer hover:bg-[var(--bg-tertiary)] flex justify-between items-center group ${isActive ? 'active' : ''}`;
+            item.innerHTML = `
+                <span class="flex-grow truncate" title="${chat.name}">${chat.name}</span> 
+                <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+                    <button class="rename-chat-btn p-1 hover:text-blue-400" title="Renomear">&#9998;</button>
+                    <button class="delete-chat-btn p-1 hover:text-red-400 text-lg" title="Apagar">&times;</button>
+                </div>
+            `;
+            item.addEventListener('click', (e) => { 
+                if (!e.target.closest('button')) switchChat(chat.id); 
+            });
+            item.querySelector('.rename-chat-btn').addEventListener('click', () => {
+                showRenameModal(chat.id, chat.name);
+            });
+            item.querySelector('.delete-chat-btn').addEventListener('click', () => { 
+                deleteChat(chat.id);
+            });
+            elements.chatListContainer.appendChild(item);
+        });
+    };
+
+    const appendMessage = (message) => {
+        const { text, sender, isPro, usedContext, isError } = message;
+        elements.chatPlaceholder.classList.add('panel-hidden');
+        
+        const contentHTML = isError 
+            ? `<span class="text-red-500 font-bold">${text}</span>`
+            : DOMPurify.sanitize(marked.parse(text));
+        
+        const messageWrapper = document.createElement('div');
+        messageWrapper.className = 'chat-message';
+        
+        let bubbleClass = 'chat-bubble-ai';
+        if (sender === 'user') { 
+            bubbleClass = 'chat-bubble-user'; 
+        } else if (isPro) { 
+            bubbleClass = 'chat-bubble-ai-pro'; 
+        }
+
+        const alignment = sender === 'user' ? 'items-end' : 'items-start';
+        const order = sender === 'user' ? 'order-2 items-end' : 'order-2 items-start';
+        const avatar = sender === 'user' 
+            ? `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` 
+            : `<img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
+        
+        const saveButtonHTML = (sender === 'ai' && text.trim() && !isError && !text.includes('blinking-cursor')) 
+            ? `<button class="save-memory-btn mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>` 
+            : '';
+        const contextHTML = (usedContext && usedContext.length > 0 && sender === 'ai') 
+            ? `<div class="text-xs text-[var(--text-secondary)] mt-2 border-t border-[var(--border-color)] pt-1">Contexto usado: ${usedContext.join(', ')}</div>` 
+            : '';
+        
+        messageWrapper.innerHTML = `
+            <div class="flex ${alignment}">
+                <div class="flex flex-col space-y-2 text-md max-w-3xl mx-2 ${order}">
+                    <div>
+                        <div class="px-4 py-2 rounded-lg inline-block ${sender === 'user' ? 'rounded-br-none' : 'rounded-bl-none'} ${bubbleClass}">
+                            <div class="markdown-content">${contentHTML}</div>
+                            ${contextHTML}
+                        </div>
+                        ${saveButtonHTML}
+                    </div>
+                </div>
+                ${avatar}
+            </div>`;
+        
+        elements.chatMessages.appendChild(messageWrapper);
+        elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+        if (sender === 'ai' && text.trim() && !isError && !text.includes('blinking-cursor')) {
+            const saveBtn = messageWrapper.querySelector('.save-memory-btn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => openMemoryModal(text));
+            }
+        }
+        return messageWrapper;
+    };
+
+    const renderCanvas = (content, shouldSave = true) => {
+        const chat = appState.chats[appState.activeChatId];
+        if(!chat) return;
+        
+        if (!content || content.trim() === '') {
+            elements.canvasContent.innerHTML = `
+                <div class="canvas-empty-state">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h3>Canvas Vazio</h3>
+                    <p>Conteúdo técnico e documentos aparecerão aqui.</p>
+                </div>
+            `;
+            elements.canvasFileType.textContent = '📄 Documento';
+            elements.canvasLineCount.textContent = '0 linhas';
+        } else {
+            let fileType = '📄 Documento';
+            if (content.includes('```javascript') || content.includes('```js')) fileType = '🟨 JavaScript';
+            else if (content.includes('```python') || content.includes('```py')) fileType = '🐍 Python';
+            else if (content.includes('```html')) fileType = '🌐 HTML';
+            else if (content.includes('```css')) fileType = '🎨 CSS';
+            else if (content.includes('```json')) fileType = '📋 JSON';
+            else if (content.includes('```')) fileType = '💻 Código';
+            
+            const lineCount = content.split('\n').length;
+            const parsedContent = DOMPurify.sanitize(marked.parse(content));
+            
+            elements.canvasContent.innerHTML = `<div class="canvas-document"><div class="canvas-document-content">${parsedContent}</div></div>`;
+            
+            elements.canvasFileType.textContent = fileType;
+            elements.canvasLineCount.textContent = `${lineCount} linhas`;
+            
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAllUnder(elements.canvasContent);
+            }
+        }
+        
+        if (shouldSave) {
+            chat.canvasContent = content;
+            saveState();
+        }
+    };
+
+    const renderMemories = () => {
+        const chat = appState.chats[appState.activeChatId];
+        const chatMemories = chat ? (chat.memories || []) : [];
+        const allMemories = [
+            ...chatMemories.map(m => ({...m, isGlobal: false})),
+            ...appState.globalMemories.map(m => ({...m, isGlobal: true}))
+        ];
+        
+        const memoryContainer = elements.memoryContainer;
+        memoryContainer.innerHTML = ''; // Limpa o container
+
+        const searchTerm = elements.memorySearch.value.toLowerCase();
+        const filteredMemories = allMemories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
+
+        if (filteredMemories.length === 0) {
+            memoryContainer.innerHTML = `<div class="p-4 text-center text-[var(--text-secondary)] text-sm">Nenhuma memória encontrada.</div>`;
+            return;
+        }
+
+        const groupedByTopic = filteredMemories.reduce((acc, mem) => {
+            const topics = mem.topics && mem.topics.length > 0 ? mem.topics : ['geral'];
+            topics.forEach(topic => {
+                if (!acc[topic]) acc[topic] = [];
+                acc[topic].push(mem);
+            });
+            return acc;
+        }, {});
+
+        const sortedTopics = Object.keys(groupedByTopic).sort();
+
+        sortedTopics.forEach(topic => {
+            const details = document.createElement('details');
+            details.className = 'p-2';
+            details.open = searchTerm.length > 0;
+
+            const summary = document.createElement('summary');
+            summary.className = 'font-bold text-lg cursor-pointer p-2 bg-[var(--bg-tertiary)] rounded-lg flex justify-between items-center memory-topic-header';
+            summary.innerHTML = `<span>${topic.charAt(0).toUpperCase() + topic.slice(1)}</span>
+                <div class="flex items-center space-x-2">
+                    <button class="rename-topic-btn p-1 hover:text-blue-400 text-xs" title="Renomear Tópico">&#9998;</button>
+                    <button class="delete-topic-btn p-1 hover:text-red-400 text-xs" title="Apagar Tópico">&times;</button>
+                </div>`;
+            
+            const topicContent = document.createElement('div');
+            topicContent.className = 'pl-4 pt-2';
+
+            groupedByTopic[topic].forEach(mem => {
+                const memEl = document.createElement('div');
+                memEl.className = 'memory-item p-3 mb-2 bg-[var(--bg-secondary)] border-l-4 border-yellow-500 rounded-r-lg shadow-sm';
+                
+                const moveButtonHTML = !mem.isGlobal 
+                    ? `<button class="move-to-global-btn" data-id="${mem.id}" title="Mover para Global">🌐</button>` 
+                    : '';
+                
+                memEl.innerHTML = `
+                    <p class="text-sm text-[var(--text-primary)]">${mem.text}</p>
+                    <div class="flex justify-between items-center mt-2">
+                        <button class="delete-memory-btn text-xs text-red-500 hover:text-red-400 font-semibold" data-id="${mem.id}" data-is-global="${mem.isGlobal}">Excluir</button>
+                        ${moveButtonHTML}
+                    </div>`;
+                topicContent.appendChild(memEl);
+            });
+            
+            details.appendChild(summary);
+            details.appendChild(topicContent);
+            memoryContainer.appendChild(details);
+
+            summary.querySelector('.rename-topic-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                showRenameTopicModal(topic);
+            });
+
+            summary.querySelector('.delete-topic-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                showConfirmationModal(`Tem certeza que deseja apagar o tópico "${topic}" e todas as suas memórias?`, () => deleteTopic(topic));
+            });
+        });
+
+        memoryContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-memory-btn')) {
+                const memoryId = e.target.getAttribute('data-id');
+                const isGlobal = e.target.getAttribute('data-is-global') === 'true';
+                deleteMemory(memoryId, isGlobal);
+            } else if (e.target.classList.contains('move-to-global-btn')) {
+                const memoryId = e.target.getAttribute('data-id');
+                moveMemoryToGlobal(memoryId);
+            }
+        });
+    };
+
+    const clearAttachment = () => {
+        attachedFile = null;
+        elements.attachmentPreview.innerHTML = '';
+        elements.attachmentPreview.classList.add('hidden');
+        elements.fileInput.value = '';
+    };
+
+    const handleFileDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.userInput.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            handleFileAttachment(file);
+        }
+    };
+
+    const handleFileAttachment = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const base64Data = e.target.result.split(',')[1];
+            attachedFile = {
+                mimeType: file.type,
+                data: base64Data
+            };
+            
+            elements.attachmentPreview.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <img src="${e.target.result}" alt="Preview" class="w-16 h-16 object-cover rounded">
+                    <span class="text-sm">${file.name}</span>
+                    <button id="removeAttachment" class="text-red-500 hover:text-red-700">&times;</button>
+                </div>
+            `;
+            elements.attachmentPreview.classList.remove('hidden');
+            
+            document.getElementById('removeAttachment').addEventListener('click', clearAttachment);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const setGeneratingState = (isGenerating) => {
+        appState.isGenerating = isGenerating;
+        elements.userInput.disabled = isGenerating;
+        elements.sendButton.classList.toggle('hidden', isGenerating);
+        elements.stopButton.classList.toggle('hidden', !isGenerating);
+        if (isGenerating) {
+            abortController = new AbortController();
+        }
+    };
+
+    const handleSend = async () => {
+        if (!appState.activeChatId) {
+            createNewChat();
+            // Aguarda um ciclo para garantir que o estado do chat ativo seja definido
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        
+        const chat = appState.chats[appState.activeChatId];
+        if (!chat) return;
+
+        const query = elements.userInput.value.trim();
+        if (!query && !attachedFile) return;
+
+        setGeneratingState(true);
+
+        const userMessage = { text: query, sender: 'user' };
+        chat.history.push(userMessage);
+        appendMessage(userMessage);
+        elements.userInput.value = '';
+
+        const imagePart = attachedFile ? { inlineData: { mimeType: attachedFile.type, data: attachedFile.data } } : null;
+        clearAttachment();
+        
+        const aiMessageWrapper = appendMessage({ text: '<span class="blinking-cursor"></span>', sender: 'ai' });
+        
+        try {
+            const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
+            const relevantMemories = selectRelevantMemories(allMemories, query);
+            const memoryContext = formatMemoriesForContext(relevantMemories);
+            const finalPrompt = buildDetailedMegaPrompt({ prompt: query, memoryContext, useDynamicPersona: appState.settings.dynamicPersona });
+
+            const parts = [{ text: finalPrompt }];
+            if (imagePart) {
+                parts.push(imagePart);
+            }
+            
+            const payload = {
+                contents: [{ parts }],
+                generationConfig: { temperature: 0.7, topP: 0.95 },
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" }
+                ]
+            };
+            
+            const apiKey = ""; // Será fornecido pelo ambiente
+            const model = appState.settings.isProMode ? "gemini-pro" : "gemini-1.5-flash-latest";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: abortController.signal
+            });
+
+            if (!response.ok) {
+                const errorJson = await response.json();
+                throw new Error(errorJson?.error?.message || `Erro da API: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponseText = "";
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (line.trim().startsWith('data:')) {
+                        try {
+                            const jsonStr = line.trim().substring(5);
+                            const data = JSON.parse(jsonStr);
+                            const textChunk = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                            fullResponseText += textChunk;
+                            aiMessageWrapper.querySelector('.markdown-content').innerHTML = DOMPurify.sanitize(marked.parse(fullResponseText + '<span class="blinking-cursor"></span>'));
+                            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                        } catch (e) { /* Ignorar erros de parse */ }
+                    }
+                }
+            }
+            
+            let finalAiText = fullResponseText;
+            let canvasContent = chat.canvasContent || '';
+            const canvasBeginTag = "[CANVAS_BEGINS]";
+            const canvasEndTag = "[CANVAS_ENDS]";
+            const beginIndex = fullResponseText.indexOf(canvasBeginTag);
+
+            if (beginIndex !== -1) {
+                const endIndex = fullResponseText.lastIndexOf(canvasEndTag);
+                if (endIndex > beginIndex) {
+                    finalAiText = fullResponseText.substring(0, beginIndex).trim();
+                    canvasContent = fullResponseText.substring(beginIndex + canvasBeginTag.length, endIndex).trim();
+                    renderCanvas(canvasContent);
+                    if (elements.rightPanelContainer.classList.contains('right-panel-collapsed')) {
+                        switchView('canvas');
+                    }
+                }
+            }
+            
+            aiMessageWrapper.remove();
+            const finalMessage = { text: finalAiText, sender: 'ai', isPro: appState.settings.isProMode, usedContext: relevantMemories.map(m => m.topics).flat() };
+            appendMessage(finalMessage);
+            chat.history.push(finalMessage);
+            chat.canvasContent = canvasContent;
+
+        } catch (error) {
+             aiMessageWrapper.remove();
+             const errorMessage = error.name === 'AbortError' ? "Geração interrompida." : `**Erro:** ${error.message}`;
+             const errorMsgObject = { text: errorMessage, sender: 'ai', isError: true };
+             appendMessage(errorMsgObject);
+             chat.history.push(errorMsgObject);
+        } finally {
+            setGeneratingState(false);
+            saveState();
+        }
+    };
+    
+    const switchView = (view) => {
+        appState.activeRightPanelView = view;
+        const isMemory = view === 'memory';
+        elements.memoryPanel.classList.toggle('hidden', !isMemory);
+        elements.memoryPanel.classList.toggle('flex', isMemory);
+        elements.canvasPanel.classList.toggle('hidden', isMemory);
+        elements.canvasPanel.classList.toggle('flex', !isMemory);
+        elements.viewMemoryBtn.classList.toggle('active', isMemory);
+        elements.viewCanvasBtn.classList.toggle('active', !isMemory);
+        
+        if (!isMemory) {
+            elements.body.classList.add('canvas-mode');
+        } else {
+            elements.body.classList.remove('canvas-mode');
+        }
+        
+        saveState();
+    };
+
+    const switchMemoryView = (view) => {
+        appState.activeMemoryView = view;
+        const isGlobal = view === 'global';
+        elements.viewGlobalMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+        elements.viewChatMemoryBtn.className = `px-2 py-1 text-xs font-semibold rounded-md ${!isGlobal ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+        renderMemories();
+        saveState();
+    };
+    
+    const showConfirmationModal = (message, onConfirm) => {
+        elements.confirmMessage.textContent = message;
+        confirmCallback = onConfirm;
+        elements.confirmModal.classList.remove('hidden');
+    };
+
+    const showNotification = (message) => {
+        elements.notificationMessage.textContent = message;
+        elements.notificationModal.classList.remove('hidden');
+    };
+    
+    const openMemoryModal = (rawText = null) => {
+        elements.memoryText.value = rawText || '';
+        elements.memoryTopics.value = '';
+        elements.isGlobalMemory.checked = appState.activeMemoryView === 'global';
+        elements.memoryModal.classList.remove('hidden');
+        elements.memoryText.focus();
+    };
+
+    const saveMemory = () => {
+        const text = elements.memoryText.value.trim();
+        const topics = elements.memoryTopics.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+        const isGlobal = elements.isGlobalMemory.checked;
+        
+        if (!text || topics.length === 0) { 
+            showNotification('Texto e tópicos são obrigatórios.'); 
+            return; 
+        }
+        
+        const newMemory = { 
+            id: `mem-${Date.now()}`, 
+            text, 
+            topics,
+            lastAccessed: Date.now()
+        };
+        
+        if (isGlobal) {
+            appState.globalMemories.push(newMemory);
+        } else {
+            if (!appState.activeChatId) createNewChat();
+            const chat = appState.chats[appState.activeChatId];
+            if (chat) {
+                if (!chat.memories) chat.memories = [];
+                chat.memories.push(newMemory);
+            }
+        }
+        
+        saveState();
+        renderMemories();
+        elements.memoryModal.classList.add('hidden');
+    };
+    
+    const deleteMemory = (memoryId, isGlobal) => {
+        if (isGlobal) {
+            appState.globalMemories = appState.globalMemories.filter(mem => mem.id !== memoryId);
+        } else {
+            const chat = appState.chats[appState.activeChatId];
+            if (chat) {
+                chat.memories = (chat.memories || []).filter(mem => mem.id !== memoryId);
+            }
+        }
+        saveState();
+        renderMemories();
+    };
+
+    const deleteTopic = (topicName) => {
+        const memories = getCurrentMemories();
+        memories.forEach(mem => { 
+            mem.topics = mem.topics.filter(t => t !== topicName); 
+        });
+        const filteredMemories = memories.filter(mem => mem.topics.length > 0);
+        
+        if (appState.activeMemoryView === 'global') {
+            appState.globalMemories = filteredMemories;
+        } else {
+            const chat = appState.chats[appState.activeChatId];
+            if (chat) {
+                chat.memories = filteredMemories;
+            }
+        }
+        
+        saveState();
+        renderMemories();
+    };
+
+    const renameTopic = (oldName, newName) => {
+        if (!newName || newName.trim() === '') return;
+        
+        const memories = getCurrentMemories();
+        memories.forEach(mem => {
+            mem.topics = mem.topics.map(t => t === oldName ? newName.toLowerCase() : t);
+        });
+        
+        saveState();
+        renderMemories();
+    };
+
+    const setProUI = (active) => {
+        appState.settings.isProMode = active;
+        elements.mainTitle.textContent = active ? "Phoenix Chat (PRO)" : "Phoenix Chat";
+        const svg = elements.proModeBtn.querySelector('svg');
+        if (active) { 
+            svg.classList.add('text-yellow-400'); 
+        } else { 
+            svg.classList.remove('text-yellow-400'); 
+            appState.settings.proModeToken = null; 
+        }
+        saveState();
+    };
+
+    const verifyPassword = async () => {
+        // Esta função precisaria de um backend para ser segura.
+        // Simulando sucesso para fins de frontend.
+        const password = elements.proPasswordInput.value;
+        if (password) { // Simulação simples
+            appState.settings.proModeToken = password;
+            setProUI(true);
+            showNotification("Modo Pro ativado!");
+        } else {
+            setProUI(false);
+            showNotification("Senha incorreta.");
+        }
+        elements.passwordModal.classList.add('hidden');
+        elements.proPasswordInput.value = '';
+    };
+    
+    const applySettings = () => {
+        document.documentElement.classList.toggle('dark', appState.settings.theme === 'dark');
+        document.body.classList.toggle('light-mode-active', appState.settings.theme === 'light');
+
+        if (elements.themeToggle) {
+            elements.themeToggle.checked = appState.settings.theme === 'dark';
+        }
+        if (elements.dynamicPersonaToggle) {
+            elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
+        }
+        if (elements.autoMemoryToggle) {
+            elements.autoMemoryToggle.checked = appState.settings.autoMemory;
+        }
+    };
+
+    const showRenameModal = (chatId, currentName) => {
+        elements.renameInput.value = currentName;
+        renameCallback = (newName) => renameChat(chatId, newName);
+        elements.renameModal.classList.remove('hidden');
+        elements.renameInput.focus();
+    };
+
+    const showRenameTopicModal = (currentName) => {
+        elements.renameTopicInput.value = currentName;
+        renameTopicCallback = (newName) => renameTopic(currentName, newName);
+        elements.renameTopicModal.classList.remove('hidden');
+        elements.renameTopicInput.focus();
+    };
+
+    const copyCanvasContent = () => {
+        const chat = appState.chats[appState.activeChatId];
+        if (chat && chat.canvasContent) {
+            navigator.clipboard.writeText(chat.canvasContent).then(() => {
+                showNotification('Conteúdo copiado para a área de transferência!');
+            });
+        }
+    };
+
+    const downloadCanvasContent = () => {
+        const chat = appState.chats[appState.activeChatId];
+        if (chat && chat.canvasContent) {
+            const blob = new Blob([chat.canvasContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `canvas-${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    const clearCanvasContent = () => {
+        showConfirmationModal('Tem certeza que deseja limpar o Canvas?', () => {
+            renderCanvas('');
+        });
+    };
+
+    // --- EVENT LISTENERS ---
+    elements.createFirstChatBtn.addEventListener('click', createNewChat);
+    elements.newChatBtn.addEventListener('click', createNewChat);
+    elements.sendButton.addEventListener('click', handleSend);
+    elements.stopButton.addEventListener('click', () => {
+        if (abortController) {
+            abortController.abort();
         }
     });
-}
+
+    elements.userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    });
+
+    elements.userInput.addEventListener('input', () => {
+        const textarea = elements.userInput;
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(textarea.scrollHeight, 200);
+        textarea.style.height = newHeight + 'px';
+        textarea.classList.toggle('has-scroll', textarea.scrollHeight > 200);
+    });
+
+    elements.proModeBtn.addEventListener('click', () => {
+        if (appState.settings.isProMode) {
+            setProUI(false);
+        } else {
+            elements.passwordModal.classList.remove('hidden');
+            elements.proPasswordInput.focus();
+        }
+    });
+
+    elements.confirmPassword.addEventListener('click', verifyPassword);
+    elements.cancelPassword.addEventListener('click', () => {
+        elements.passwordModal.classList.add('hidden');
+        elements.proPasswordInput.value = '';
+    });
+
+    elements.closeNotification.addEventListener('click', () => {
+        elements.notificationModal.classList.add('hidden');
+    });
+
+    elements.confirmSave.addEventListener('click', saveMemory);
+    elements.cancelSave.addEventListener('click', () => {
+        elements.memoryModal.classList.add('hidden');
+    });
+
+    elements.doConfirm.addEventListener('click', () => {
+        if (confirmCallback) confirmCallback();
+        elements.confirmModal.classList.add('hidden');
+        confirmCallback = null;
+    });
+    elements.cancelConfirm.addEventListener('click', () => {
+        elements.confirmModal.classList.add('hidden');
+        confirmCallback = null;
+    });
+
+    elements.confirmRename.addEventListener('click', () => {
+        const newName = elements.renameInput.value.trim();
+        if (newName && renameCallback) {
+            renameCallback(newName);
+        }
+        elements.renameModal.classList.add('hidden');
+        renameCallback = null;
+    });
+    elements.cancelRename.addEventListener('click', () => {
+        elements.renameModal.classList.add('hidden');
+        renameCallback = null;
+    });
+
+    elements.confirmRenameTopic.addEventListener('click', () => {
+        const newName = elements.renameTopicInput.value.trim();
+        if (newName && renameTopicCallback) {
+            renameTopicCallback(newName);
+        }
+        elements.renameTopicModal.classList.add('hidden');
+        renameTopicCallback = null;
+    });
+    elements.cancelRenameTopic.addEventListener('click', () => {
+        elements.renameTopicModal.classList.add('hidden');
+        renameTopicCallback = null;
+    });
+
+    elements.settingsBtn.addEventListener('click', () => {
+        elements.settingsModal.classList.remove('hidden');
+    });
+    elements.closeSettings.addEventListener('click', () => {
+        elements.settingsModal.classList.add('hidden');
+    });
+
+    elements.themeToggle.addEventListener('change', () => {
+        appState.settings.theme = elements.themeToggle.checked ? 'dark' : 'light';
+        applySettings();
+        saveState();
+    });
+
+    elements.autoMemoryToggle.addEventListener('change', () => {
+        appState.settings.autoMemory = elements.autoMemoryToggle.checked;
+        saveState();
+    });
+
+    elements.dynamicPersonaToggle.addEventListener('change', () => {
+        appState.settings.dynamicPersona = elements.dynamicPersonaToggle.checked;
+        saveState();
+    });
+
+    elements.viewMemoryBtn.addEventListener('click', () => switchView('memory'));
+    elements.viewCanvasBtn.addEventListener('click', () => switchView('canvas'));
+    
+    elements.viewGlobalMemoryBtn.addEventListener('click', () => switchMemoryView('global'));
+    elements.viewChatMemoryBtn.addEventListener('click', () => switchMemoryView('chat'));
+    
+    elements.closeRightPanelBtn.addEventListener('click', () => {
+        elements.rightPanelContainer.classList.add('right-panel-collapsed');
+        elements.expandRightPanelBtn.classList.remove('panel-hidden');
+    });
+
+    elements.expandRightPanelBtn.addEventListener('click', () => {
+        elements.rightPanelContainer.classList.remove('right-panel-collapsed');
+        elements.expandRightPanelBtn.classList.add('panel-hidden');
+    });
+
+    elements.addMemoryBtn.addEventListener('click', () => openMemoryModal());
+    elements.memorySearch.addEventListener('input', renderMemories);
+
+    elements.attachFileBtn.addEventListener('click', () => {
+        elements.fileInput.click();
+    });
+
+    elements.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file && file.type.startsWith('image/')) {
+            handleFileAttachment(file);
+        }
+    });
+
+    elements.userInput.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.userInput.classList.add('drag-over');
+    });
+    elements.userInput.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.userInput.classList.remove('drag-over');
+    });
+    elements.userInput.addEventListener('drop', handleFileDrop);
+
+    elements.collapseChatListBtn.addEventListener('click', () => {
+        elements.leftSidebar.classList.add('panel-hidden');
+        elements.expandChatListBtn.classList.remove('panel-hidden');
+    });
+
+    elements.expandChatListBtn.addEventListener('click', () => {
+        elements.leftSidebar.classList.remove('panel-hidden');
+        elements.expandChatListBtn.classList.add('panel-hidden');
+    });
+
+    elements.canvasCopyBtn.addEventListener('click', copyCanvasContent);
+    elements.canvasDownloadBtn.addEventListener('click', downloadCanvasContent);
+    elements.canvasClearBtn.addEventListener('click', clearCanvasContent);
+
+    initCanvasResizer();
+    loadState();
+});
+
     </script>
 </body>
 </html>
