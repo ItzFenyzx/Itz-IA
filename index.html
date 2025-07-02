@@ -804,7 +804,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     </div>
     
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+       document.addEventListener('DOMContentLoaded', () => {
     let appState = {
         activeChatId: null,
         chats: {},
@@ -985,11 +985,11 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
 
     const saveState = () => {
         const stateToSave = { ...appState, proModeToken: null };
-        localStorage.setItem('phoenixChatState_v28', JSON.stringify(stateToSave));
+        localStorage.setItem('phoenixChatState_v29', JSON.stringify(stateToSave));
     };
 
     const loadState = () => {
-        const savedState = localStorage.getItem('phoenixChatState_v28');
+        const savedState = localStorage.getItem('phoenixChatState_v29');
         if (savedState) {
             try {
                 const parsedState = JSON.parse(savedState);
@@ -1004,7 +1004,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
                 appState = { ...appState, ...parsedState };
             } catch (e) {
                 console.error("Falha ao analisar o estado salvo, redefinindo:", e);
-                localStorage.removeItem('phoenixChatState_v28');
+                localStorage.removeItem('phoenixChatState_v29');
             }
         }
         
@@ -1016,25 +1016,24 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         applySettings();
     };
     
+    // CORREÇÃO: Lógica de visibilidade simplificada e robusta
     const updateEmptyState = () => {
         const hasChats = Object.keys(appState.chats).length > 0;
-        elements.emptyState.classList.toggle('panel-hidden', hasChats);
-        elements.mainInterface.classList.toggle('panel-hidden', !hasChats);
         
-        if(hasChats) {
-            setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
-        } else {
-            elements.mainInterface.classList.add('opacity-0');
-        }
+        if (hasChats) {
+            elements.emptyState.classList.add('panel-hidden');
+            elements.mainInterface.classList.remove('panel-hidden');
+            elements.mainInterface.classList.remove('opacity-0');
 
-        if (!hasChats) {
-            appState.activeChatId = null;
-        } else if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
-            appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
-        }
-        
-        if (appState.activeChatId) {
+            if (!appState.activeChatId || !appState.chats[appState.activeChatId]) {
+                appState.activeChatId = Object.keys(appState.chats).sort((a,b) => b.split('-')[1] - a.split('-')[1])[0];
+            }
             loadChat(appState.activeChatId);
+        } else {
+            appState.activeChatId = null;
+            elements.emptyState.classList.remove('panel-hidden');
+            elements.mainInterface.classList.add('panel-hidden');
+            elements.mainInterface.classList.add('opacity-0');
         }
         renderChatList();
     };
@@ -1070,7 +1069,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
 
         elements.chatMessages.innerHTML = '';
         if (chat.history && chat.history.length > 0) {
-            elements.chatPlaceholder.classList.add('panel-hidden');
+            if(elements.chatPlaceholder) elements.chatPlaceholder.classList.add('panel-hidden');
             chat.history.forEach(msg => appendMessage(msg));
         } else {
             chat.history = [];
@@ -1080,7 +1079,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
                     </svg>
                     <p>Crie um novo chat para começar a conversar.</p>
                 </div>`;
-            elements.chatPlaceholder.classList.remove('panel-hidden');
+            if(elements.chatPlaceholder) elements.chatPlaceholder.classList.remove('panel-hidden');
         }
         renderMemories();
         renderCanvas(chat.canvasContent, false);
