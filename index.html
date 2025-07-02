@@ -820,10 +820,9 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         activeMemoryView: 'global',
         isCanvasMode: false,
         rightPanelWidth: 384,
-        isGenerating: false, // Controla o estado de geração da IA
+        isGenerating: false,
     };
 
-    // AbortController para interromper o fetch
     let abortController = new AbortController();
 
     const elements = {
@@ -838,7 +837,6 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         chatPlaceholder: document.getElementById('chat-placeholder'),
         userInput: document.getElementById('userInput'),
         sendButton: document.getElementById('sendButton'),
-        stopButton: document.getElementById('stopButton'), // Adicionado para referência, mesmo que não exista no HTML inicial
         attachmentPreview: document.getElementById('attachment-preview-container'),
         createFirstChatBtn: document.getElementById('create-first-chat-btn'),
         newChatBtn: document.getElementById('newChatBtn'),
@@ -898,14 +896,13 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         chatListContainer: document.getElementById('chat-list-container'),
     };
     
-    // Criar o botão de parar dinamicamente para não alterar o HTML original
     const stopButton = document.createElement('button');
     stopButton.id = 'stopButton';
     stopButton.className = 'p-3 rounded-full bg-red-600 hover:bg-red-700 text-white flex-shrink-0 hidden';
     stopButton.title = 'Parar Geração';
     stopButton.innerHTML = `<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
     elements.sendButton.parentElement.appendChild(stopButton);
-    elements.stopButton = stopButton; // Adicionar ao objeto de elementos
+    elements.stopButton = stopButton;
 
     let attachedFile = null;
     let confirmCallback = null;
@@ -966,14 +963,11 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         
         const doResize = (e) => {
             if (!isResizing) return;
-            
             const deltaX = startX - e.clientX;
             const newWidth = startWidth + deltaX;
             const minWidth = 384;
             const maxWidth = window.innerWidth * 0.6;
-            
             const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-            
             elements.rightPanelContainer.style.width = clampedWidth + 'px';
             appState.rightPanelWidth = clampedWidth;
             saveState();
@@ -1026,8 +1020,11 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         const hasChats = Object.keys(appState.chats).length > 0;
         elements.emptyState.classList.toggle('panel-hidden', hasChats);
         elements.mainInterface.classList.toggle('panel-hidden', !hasChats);
+        
         if(hasChats) {
-            elements.mainInterface.classList.remove('opacity-0');
+            setTimeout(() => elements.mainInterface.classList.remove('opacity-0'), 50);
+        } else {
+            elements.mainInterface.classList.add('opacity-0');
         }
 
         if (!hasChats) {
@@ -1052,11 +1049,8 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             canvasContent: '' 
         };
         
-        if (Object.keys(appState.chats).length === 1) {
-             updateEmptyState();
-        }
-        
         switchChat(newChatId); 
+        updateEmptyState();
     };
 
     const switchChat = (chatId) => {
@@ -1854,7 +1848,6 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     initCanvasResizer();
     loadState();
 });
-
     </script>
 </body>
 </html>
