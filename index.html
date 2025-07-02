@@ -818,9 +818,12 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         },
         activeRightPanelView: 'memory',
         activeMemoryView: 'global',
-        isGenerating: false,
+        isCanvasMode: false,
+        rightPanelWidth: 384,
+        isGenerating: false, // Controla o estado de geração da IA
     };
 
+    // AbortController para interromper o fetch
     let abortController = new AbortController();
 
     const elements = {
@@ -835,7 +838,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         chatPlaceholder: document.getElementById('chat-placeholder'),
         userInput: document.getElementById('userInput'),
         sendButton: document.getElementById('sendButton'),
-        stopButton: document.getElementById('stopButton'),
+        stopButton: document.getElementById('stopButton'), // Adicionado para referência, mesmo que não exista no HTML inicial
         attachmentPreview: document.getElementById('attachment-preview-container'),
         createFirstChatBtn: document.getElementById('create-first-chat-btn'),
         newChatBtn: document.getElementById('newChatBtn'),
@@ -895,6 +898,15 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         chatListContainer: document.getElementById('chat-list-container'),
     };
     
+    // Criar o botão de parar dinamicamente para não alterar o HTML original
+    const stopButton = document.createElement('button');
+    stopButton.id = 'stopButton';
+    stopButton.className = 'p-3 rounded-full bg-red-600 hover:bg-red-700 text-white flex-shrink-0 hidden';
+    stopButton.title = 'Parar Geração';
+    stopButton.innerHTML = `<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
+    elements.sendButton.parentElement.appendChild(stopButton);
+    elements.stopButton = stopButton; // Adicionar ao objeto de elementos
+
     let attachedFile = null;
     let confirmCallback = null;
     let renameCallback = null;
@@ -987,7 +999,6 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         if (savedState) {
             try {
                 const parsedState = JSON.parse(savedState);
-                // Merge settings to avoid losing new default properties
                 const defaultSettings = {
                     theme: 'dark',
                     dynamicPersona: true,
@@ -1069,6 +1080,12 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             chat.history.forEach(msg => appendMessage(msg));
         } else {
             chat.history = [];
+            elements.chatMessages.innerHTML = `<div id="chat-placeholder" class="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
+                    <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5-2.5-7S3 7 3 7a8 8 0 0110.657 10.657l3.414 3.414a2 2 0 01-2.828 2.828l-3.414-3.414zM4 4l16 16"/>
+                    </svg>
+                    <p>Crie um novo chat para começar a conversar.</p>
+                </div>`;
             elements.chatPlaceholder.classList.remove('panel-hidden');
         }
         renderMemories();
@@ -1132,7 +1149,9 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
 
     const appendMessage = (message) => {
         const { text, sender, isPro, usedContext, isError } = message;
-        elements.chatPlaceholder.classList.add('panel-hidden');
+        if (elements.chatPlaceholder) {
+            elements.chatPlaceholder.classList.add('panel-hidden');
+        }
         
         const contentHTML = isError 
             ? `<span class="text-red-500 font-bold">${text}</span>`
@@ -1188,7 +1207,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     };
 
     const renderCanvas = (content, shouldSave = true) => {
-        const chat = appState.chats[appState.activeChatId];
+        const chat = appState.activeChatId ? appState.chats[appState.activeChatId] : null;
         if(!chat) return;
         
         if (!content || content.trim() === '') {
@@ -1215,7 +1234,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             const lineCount = content.split('\n').length;
             const parsedContent = DOMPurify.sanitize(marked.parse(content));
             
-            elements.canvasContent.innerHTML = `<div class="canvas-document"><div class="canvas-document-content">${parsedContent}</div></div>`;
+            elements.canvasContent.innerHTML = `<div class="canvas-document"><div class="canvas-document-content p-4">${parsedContent}</div></div>`;
             
             elements.canvasFileType.textContent = fileType;
             elements.canvasLineCount.textContent = `${lineCount} linhas`;
@@ -1225,14 +1244,14 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             }
         }
         
-        if (shouldSave) {
+        if (shouldSave && chat) {
             chat.canvasContent = content;
             saveState();
         }
     };
 
     const renderMemories = () => {
-        const chat = appState.chats[appState.activeChatId];
+        const chat = appState.activeChatId ? appState.chats[appState.activeChatId] : null;
         const chatMemories = chat ? (chat.memories || []) : [];
         const allMemories = [
             ...chatMemories.map(m => ({...m, isGlobal: false})),
@@ -1240,7 +1259,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         ];
         
         const memoryContainer = elements.memoryContainer;
-        memoryContainer.innerHTML = ''; // Limpa o container
+        memoryContainer.innerHTML = '';
 
         const searchTerm = elements.memorySearch.value.toLowerCase();
         const filteredMemories = allMemories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
@@ -1259,9 +1278,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             return acc;
         }, {});
 
-        const sortedTopics = Object.keys(groupedByTopic).sort();
-
-        sortedTopics.forEach(topic => {
+        Object.keys(groupedByTopic).sort().forEach(topic => {
             const details = document.createElement('details');
             details.className = 'p-2';
             details.open = searchTerm.length > 0;
@@ -1310,55 +1327,18 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         });
 
         memoryContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('delete-memory-btn')) {
-                const memoryId = e.target.getAttribute('data-id');
-                const isGlobal = e.target.getAttribute('data-is-global') === 'true';
+            const target = e.target.closest('button');
+            if (!target) return;
+            
+            if (target.classList.contains('delete-memory-btn')) {
+                const memoryId = target.getAttribute('data-id');
+                const isGlobal = target.getAttribute('data-is-global') === 'true';
                 deleteMemory(memoryId, isGlobal);
-            } else if (e.target.classList.contains('move-to-global-btn')) {
-                const memoryId = e.target.getAttribute('data-id');
+            } else if (target.classList.contains('move-to-global-btn')) {
+                const memoryId = target.getAttribute('data-id');
                 moveMemoryToGlobal(memoryId);
             }
         });
-    };
-
-    const clearAttachment = () => {
-        attachedFile = null;
-        elements.attachmentPreview.innerHTML = '';
-        elements.attachmentPreview.classList.add('hidden');
-        elements.fileInput.value = '';
-    };
-
-    const handleFileDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        elements.userInput.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            handleFileAttachment(file);
-        }
-    };
-
-    const handleFileAttachment = (file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const base64Data = e.target.result.split(',')[1];
-            attachedFile = {
-                mimeType: file.type,
-                data: base64Data
-            };
-            
-            elements.attachmentPreview.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <img src="${e.target.result}" alt="Preview" class="w-16 h-16 object-cover rounded">
-                    <span class="text-sm">${file.name}</span>
-                    <button id="removeAttachment" class="text-red-500 hover:text-red-700">&times;</button>
-                </div>
-            `;
-            elements.attachmentPreview.classList.remove('hidden');
-            
-            document.getElementById('removeAttachment').addEventListener('click', clearAttachment);
-        };
-        reader.readAsDataURL(file);
     };
 
     const setGeneratingState = (isGenerating) => {
@@ -1374,7 +1354,6 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     const handleSend = async () => {
         if (!appState.activeChatId) {
             createNewChat();
-            // Aguarda um ciclo para garantir que o estado do chat ativo seja definido
             await new Promise(resolve => setTimeout(resolve, 0));
         }
         
@@ -1501,17 +1480,12 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         appState.activeRightPanelView = view;
         const isMemory = view === 'memory';
         elements.memoryPanel.classList.toggle('hidden', !isMemory);
-        elements.memoryPanel.classList.toggle('flex', isMemory);
         elements.canvasPanel.classList.toggle('hidden', isMemory);
-        elements.canvasPanel.classList.toggle('flex', !isMemory);
         elements.viewMemoryBtn.classList.toggle('active', isMemory);
         elements.viewCanvasBtn.classList.toggle('active', !isMemory);
         
-        if (!isMemory) {
-            elements.body.classList.add('canvas-mode');
-        } else {
-            elements.body.classList.remove('canvas-mode');
-        }
+        const isCanvasMode = !isMemory;
+        elements.body.classList.toggle('canvas-mode', isCanvasMode);
         
         saveState();
     };
@@ -1578,20 +1552,24 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     };
     
     const deleteMemory = (memoryId, isGlobal) => {
-        if (isGlobal) {
-            appState.globalMemories = appState.globalMemories.filter(mem => mem.id !== memoryId);
-        } else {
-            const chat = appState.chats[appState.activeChatId];
-            if (chat) {
-                chat.memories = (chat.memories || []).filter(mem => mem.id !== memoryId);
+        showConfirmationModal(`Tem certeza que deseja apagar esta memória?`, () => {
+            if (isGlobal) {
+                appState.globalMemories = appState.globalMemories.filter(mem => mem.id !== memoryId);
+            } else {
+                const chat = appState.chats[appState.activeChatId];
+                if (chat) {
+                    chat.memories = (chat.memories || []).filter(mem => mem.id !== memoryId);
+                }
             }
-        }
-        saveState();
-        renderMemories();
+            saveState();
+            renderMemories();
+        });
     };
 
     const deleteTopic = (topicName) => {
-        const memories = getCurrentMemories();
+        const memories = appState.activeMemoryView === 'global' ? appState.globalMemories : appState.chats[appState.activeChatId]?.memories;
+        if (!memories) return;
+
         memories.forEach(mem => { 
             mem.topics = mem.topics.filter(t => t !== topicName); 
         });
@@ -1612,8 +1590,9 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
 
     const renameTopic = (oldName, newName) => {
         if (!newName || newName.trim() === '') return;
-        
-        const memories = getCurrentMemories();
+        const memories = appState.activeMemoryView === 'global' ? appState.globalMemories : appState.chats[appState.activeChatId]?.memories;
+        if (!memories) return;
+
         memories.forEach(mem => {
             mem.topics = mem.topics.map(t => t === oldName ? newName.toLowerCase() : t);
         });
@@ -1635,11 +1614,9 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         saveState();
     };
 
-    const verifyPassword = async () => {
-        // Esta função precisaria de um backend para ser segura.
-        // Simulando sucesso para fins de frontend.
+    const verifyPassword = () => {
         const password = elements.proPasswordInput.value;
-        if (password) { // Simulação simples
+        if (password) { 
             appState.settings.proModeToken = password;
             setProUI(true);
             showNotification("Modo Pro ativado!");
@@ -1659,10 +1636,10 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             elements.themeToggle.checked = appState.settings.theme === 'dark';
         }
         if (elements.dynamicPersonaToggle) {
-            elements.dynamicPersonaToggle.checked = appState.settings.dynamicPersona;
+            elements.dynamicPersonaToggle.checked = !!appState.settings.dynamicPersona;
         }
         if (elements.autoMemoryToggle) {
-            elements.autoMemoryToggle.checked = appState.settings.autoMemory;
+            elements.autoMemoryToggle.checked = !!appState.settings.autoMemory;
         }
     };
 
