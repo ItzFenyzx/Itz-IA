@@ -524,6 +524,32 @@
             background-color: var(--bg-tertiary);
             border-color: var(--text-secondary);
         }
+
+        .avatar-user {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #3b82f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .avatar-ai {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #5f6368;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
@@ -1157,9 +1183,11 @@
 
         const alignment = sender === 'user' ? 'items-end' : 'items-start';
         const order = sender === 'user' ? 'order-2 items-end' : 'order-2 items-start';
+        
+        // Avatares corrigidos usando CSS
         const avatar = sender === 'user' 
-            ? `<img src="https://placehold.co/40x40/3B82F6/FFFFFF?text=Vc" alt="User" class="w-8 h-8 rounded-full order-2">` 
-            : `<img src="https://placehold.co/40x40/5F6368/FFFFFF?text=IA" alt="AI" class="w-8 h-8 rounded-full order-1">`;
+            ? `<div class="avatar-user order-2">Vc</div>` 
+            : `<div class="avatar-ai order-1">IA</div>`;
         
         const saveButtonHTML = (sender === 'ai' && text.trim() && !isError && !text.includes('blinking-cursor')) 
             ? `<button class="save-memory-btn mt-2 text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-3 rounded-full">Salvar</button>` 
@@ -1368,7 +1396,7 @@
             const relevantMemories = selectRelevantMemories(allMemories, query);
             const memoryContext = formatMemoriesForContext(relevantMemories);
 
-            // CORREÇÃO: Usar a API correta /api/gemini.js
+            // CORREÇÃO: Usar a API correta /api/gemini
             const apiUrl = `/api/gemini`;
 
             const response = await fetch(apiUrl, {
@@ -1392,57 +1420,31 @@
                 throw new Error(errorJson?.error || `Erro da API: ${response.status}`);
             }
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let fullResponseText = "";
-            let buffer = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-
-                for (const line of lines) {
-                    if (line.trim().startsWith('data:')) {
-                        try {
-                            const jsonStr = line.trim().substring(5);
-                            const data = JSON.parse(jsonStr);
-                            
-                            if (data.type === 'chunk') {
-                                fullResponseText += data.text;
-                                aiMessageWrapper.querySelector('.markdown-content').innerHTML = DOMPurify.sanitize(marked.parse(fullResponseText + '<span class="blinking-cursor"></span>'));
-                                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-                            } else if (data.type === 'complete') {
-                                fullResponseText = data.aiResponse;
-                                
-                                // Processar Canvas
-                                if (data.canvasContent) {
-                                    renderCanvas(data.canvasContent);
-                                    if (elements.rightPanelContainer.classList.contains('right-panel-collapsed')) {
-                                        switchView('canvas');
-                                    }
-                                }
-                                
-                                // Processar memória automática
-                                if (data.newMemory) {
-                                    chat.memories = chat.memories || [];
-                                    chat.memories.push(data.newMemory);
-                                }
-                                
-                                break;
-                            } else if (data.type === 'error') {
-                                throw new Error(data.error);
-                            }
-                        } catch (e) { /* Ignorar erros de parse */ }
-                    }
+            // Processar resposta JSON simples (sem streaming)
+            const result = await response.json();
+            
+            aiMessageWrapper.remove();
+            
+            // Processar Canvas
+            if (result.canvasContent) {
+                renderCanvas(result.canvasContent);
+                if (elements.rightPanelContainer.classList.contains('right-panel-collapsed')) {
+                    switchView('canvas');
                 }
             }
             
-            aiMessageWrapper.remove();
-            const finalMessage = { text: fullResponseText, sender: 'ai', isPro: appState.settings.isProMode, usedContext: relevantMemories.map(m => m.topics).flat() };
+            // Processar memória automática
+            if (result.newMemory) {
+                chat.memories = chat.memories || [];
+                chat.memories.push(result.newMemory);
+            }
+            
+            const finalMessage = { 
+                text: result.aiResponse, 
+                sender: 'ai', 
+                isPro: appState.settings.isProMode, 
+                usedContext: result.usedContext || []
+            };
             appendMessage(finalMessage);
             chat.history.push(finalMessage);
 
@@ -1901,4 +1903,3 @@
     </script>
 </body>
 </html>
-
