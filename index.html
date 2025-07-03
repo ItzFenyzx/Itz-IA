@@ -550,6 +550,96 @@
             font-weight: bold;
             font-size: 14px;
         }
+
+        /* Estilos para rolagem do Canvas e Memória */
+        #memory-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        #canvas-content {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        /* Estilos para seleção múltipla de memórias */
+        .memory-item {
+            position: relative;
+        }
+
+        .memory-item.selected {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left-color: #3b82f6;
+        }
+
+        .memory-checkbox {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .memory-item:hover .memory-checkbox,
+        .memory-item.selected .memory-checkbox {
+            opacity: 1;
+        }
+
+        .bulk-actions {
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .bulk-actions.visible {
+            display: block;
+        }
+
+        .bulk-actions button {
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            margin-right: 0.5rem;
+        }
+
+        .bulk-actions button:hover {
+            background: #047857;
+        }
+
+        /* Melhorias na separação visual entre memórias globais e do chat */
+        .memory-section-header {
+            background: var(--bg-tertiary);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .memory-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: normal;
+        }
+
+        .memory-badge.global {
+            background: #059669;
+            color: white;
+        }
+
+        .memory-badge.chat {
+            background: #3b82f6;
+            color: white;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
@@ -675,6 +765,13 @@
                         <button id="view-global-memory-btn" class="px-2 py-1 text-xs font-semibold rounded-md bg-gray-600 text-white">Global</button>
                         <button id="view-chat-memory-btn" class="px-2 py-1 text-xs font-semibold rounded-md bg-gray-700 text-gray-300">Chat</button>
                     </div>
+                    
+                    <!-- Ações em lote para memórias do chat -->
+                    <div id="bulk-actions" class="bulk-actions">
+                        <button id="move-selected-to-global">Mover Selecionadas para Global</button>
+                        <button id="clear-selection">Limpar Seleção</button>
+                    </div>
+                    
                     <div id="memory-container" class="flex-grow overflow-y-auto custom-scrollbar"></div>
                 </div>
                 
@@ -841,6 +938,7 @@
         isCanvasMode: false,
         rightPanelWidth: 384,
         isGenerating: false,
+        selectedMemories: new Set()
     };
 
     let abortController = new AbortController();
@@ -916,6 +1014,9 @@
         chatListContainer: document.getElementById('chat-list-container'),
         memoryPanel: document.getElementById('memory-panel'),
         canvasPanel: document.getElementById('canvas-panel'),
+        bulkActions: document.getElementById('bulk-actions'),
+        moveSelectedToGlobal: document.getElementById('move-selected-to-global'),
+        clearSelection: document.getElementById('clear-selection')
     };
     
     const stopButton = document.createElement('button');
@@ -931,30 +1032,6 @@
     let renameCallback = null;
     let renameTopicCallback = null;
     let isResizing = false;
-
-    function buildDetailedMegaPrompt({ prompt, memoryContext, useDynamicPersona }) {
-        const currentDate = new Date().toLocaleDateString("pt-BR");
-        return `## INSTRUÇÕES DE SISTEMA ###
-        Você é um assistente de IA avançado chamado "Phoenix Chat". Seu criador é Arthur Nascimento Nogueira.
-        Sua tecnologia é baseada no Gemini do Google. Responda em português do Brasil.
-        Hoje é ${currentDate}.
-        
-        ${useDynamicPersona 
-            ? `Analise a pergunta do usuário para definir a persona de especialista mais adequada e responda como tal, sem se apresentar.`
-            : `Aja como um polímata, um especialista em todos os campos do conhecimento, fornecendo respostas profundas e detalhadas.`
-        }
-        
-        ${memoryContext 
-            ? `Use o CONTEXTO DE MEMÓRIA abaixo APENAS SE for relevante para a pergunta. Caso contrário, ignore-o.\n--- CONTEXTO DE MEMÓRIA ---\n${memoryContext}\n--- FIM DO CONTEXTO ---`
-            : ''
-        }
-        
-        Se a resposta final for longa, técnica ou contiver código, estruture essa parte do conteúdo dentro das tags [CANVAS_BEGINS] e [CANVAS_ENDS]. O texto fora destas tags deve servir como uma breve introdução ou resumo para o chat. Se nenhum conteúdo for adequado para o Canvas, não utilize as tags.
-        
-        Responda agora à pergunta do usuário:
-        ### PERGUNTA DO UTILIZADOR ###
-        ${prompt}`;
-    }
 
     function selectRelevantMemories(memories, prompt) {
         if (!memories || memories.length === 0) return [];
@@ -1007,11 +1084,11 @@
 
     const saveState = () => {
         const stateToSave = { ...appState, proModeToken: null };
-        localStorage.setItem('phoenixChatState_v29', JSON.stringify(stateToSave));
+        localStorage.setItem('phoenixChatState_v30', JSON.stringify(stateToSave));
     };
 
     const loadState = () => {
-        const savedState = localStorage.getItem('phoenixChatState_v29');
+        const savedState = localStorage.getItem('phoenixChatState_v30');
         if (savedState) {
             try {
                 const parsedState = JSON.parse(savedState);
@@ -1026,7 +1103,7 @@
                 appState = { ...appState, ...parsedState };
             } catch (e) {
                 console.error("Falha ao analisar o estado salvo, redefinindo:", e);
-                localStorage.removeItem('phoenixChatState_v29');
+                localStorage.removeItem('phoenixChatState_v30');
             }
         }
         
@@ -1076,6 +1153,8 @@
     const switchChat = (chatId) => {
         if (!appState.chats[chatId] || appState.activeChatId === chatId || appState.isGenerating) return;
         appState.activeChatId = chatId;
+        appState.selectedMemories.clear();
+        updateBulkActions();
         saveState();
         renderChatList();
         loadChat(chatId);
@@ -1269,23 +1348,75 @@
     const renderMemories = () => {
         const chat = appState.activeChatId ? appState.chats[appState.activeChatId] : null;
         const chatMemories = chat ? (chat.memories || []) : [];
-        const allMemories = [
-            ...chatMemories.map(m => ({...m, isGlobal: false})),
-            ...appState.globalMemories.map(m => ({...m, isGlobal: true}))
-        ];
         
         const memoryContainer = elements.memoryContainer;
         memoryContainer.innerHTML = '';
 
         const searchTerm = elements.memorySearch.value.toLowerCase();
-        const filteredMemories = allMemories.filter(mem => mem.text.toLowerCase().includes(searchTerm));
+        
+        // Separar memórias globais e do chat
+        const filteredGlobalMemories = appState.globalMemories.filter(mem => 
+            mem.text.toLowerCase().includes(searchTerm)
+        );
+        const filteredChatMemories = chatMemories.filter(mem => 
+            mem.text.toLowerCase().includes(searchTerm)
+        );
 
-        if (filteredMemories.length === 0) {
-            memoryContainer.innerHTML = `<div class="p-4 text-center text-[var(--text-secondary)] text-sm">Nenhuma memória encontrada.</div>`;
-            return;
+        // Renderizar seção de memórias globais
+        if (appState.activeMemoryView === 'global' || filteredGlobalMemories.length > 0) {
+            const globalSection = document.createElement('div');
+            globalSection.className = 'memory-section mb-4';
+            
+            const globalHeader = document.createElement('div');
+            globalHeader.className = 'memory-section-header';
+            globalHeader.innerHTML = `
+                <span>Memórias Globais</span>
+                <span class="memory-badge global">${filteredGlobalMemories.length}</span>
+            `;
+            globalSection.appendChild(globalHeader);
+            
+            if (filteredGlobalMemories.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'p-4 text-center text-[var(--text-secondary)] text-sm';
+                emptyMsg.textContent = 'Nenhuma memória global encontrada.';
+                globalSection.appendChild(emptyMsg);
+            } else {
+                renderMemoryGroup(filteredGlobalMemories, globalSection, true);
+            }
+            
+            memoryContainer.appendChild(globalSection);
         }
 
-        const groupedByTopic = filteredMemories.reduce((acc, mem) => {
+        // Renderizar seção de memórias do chat
+        if (appState.activeMemoryView === 'chat' || filteredChatMemories.length > 0) {
+            const chatSection = document.createElement('div');
+            chatSection.className = 'memory-section mb-4';
+            
+            const chatHeader = document.createElement('div');
+            chatHeader.className = 'memory-section-header';
+            chatHeader.innerHTML = `
+                <span>Memórias do Chat</span>
+                <span class="memory-badge chat">${filteredChatMemories.length}</span>
+            `;
+            chatSection.appendChild(chatHeader);
+            
+            if (filteredChatMemories.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.className = 'p-4 text-center text-[var(--text-secondary)] text-sm';
+                emptyMsg.textContent = 'Nenhuma memória do chat encontrada.';
+                chatSection.appendChild(emptyMsg);
+            } else {
+                renderMemoryGroup(filteredChatMemories, chatSection, false);
+            }
+            
+            memoryContainer.appendChild(chatSection);
+        }
+
+        updateBulkActions();
+    };
+
+    const renderMemoryGroup = (memories, container, isGlobal) => {
+        const groupedByTopic = memories.reduce((acc, mem) => {
             const topics = mem.topics && mem.topics.length > 0 ? mem.topics : ['geral'];
             topics.forEach(topic => {
                 if (!acc[topic]) acc[topic] = [];
@@ -1297,7 +1428,7 @@
         Object.keys(groupedByTopic).sort().forEach(topic => {
             const details = document.createElement('details');
             details.className = 'p-2';
-            details.open = searchTerm.length > 0;
+            details.open = elements.memorySearch.value.length > 0;
 
             const summary = document.createElement('summary');
             summary.className = 'font-bold text-lg cursor-pointer p-2 bg-[var(--bg-tertiary)] rounded-lg flex justify-between items-center memory-topic-header';
@@ -1312,16 +1443,21 @@
 
             groupedByTopic[topic].forEach(mem => {
                 const memEl = document.createElement('div');
-                memEl.className = 'memory-item p-3 mb-2 bg-[var(--bg-secondary)] border-l-4 border-yellow-500 rounded-r-lg shadow-sm';
+                memEl.className = `memory-item p-3 mb-2 bg-[var(--bg-secondary)] border-l-4 border-yellow-500 rounded-r-lg shadow-sm ${appState.selectedMemories.has(mem.id) ? 'selected' : ''}`;
                 
-                const moveButtonHTML = !mem.isGlobal 
+                const moveButtonHTML = !isGlobal 
                     ? `<button class="move-to-global-btn" data-id="${mem.id}" title="Mover para Global">🌐</button>` 
                     : '';
                 
+                const checkboxHTML = !isGlobal 
+                    ? `<input type="checkbox" class="memory-checkbox" data-id="${mem.id}" ${appState.selectedMemories.has(mem.id) ? 'checked' : ''}>` 
+                    : '';
+                
                 memEl.innerHTML = `
+                    ${checkboxHTML}
                     <p class="text-sm text-[var(--text-primary)]">${mem.text}</p>
                     <div class="flex justify-between items-center mt-2">
-                        <button class="delete-memory-btn text-xs text-red-500 hover:text-red-400 font-semibold" data-id="${mem.id}" data-is-global="${mem.isGlobal}">Excluir</button>
+                        <button class="delete-memory-btn text-xs text-red-500 hover:text-red-400 font-semibold" data-id="${mem.id}" data-is-global="${isGlobal}">Excluir</button>
                         ${moveButtonHTML}
                     </div>`;
                 topicContent.appendChild(memEl);
@@ -1329,7 +1465,7 @@
             
             details.appendChild(summary);
             details.appendChild(topicContent);
-            memoryContainer.appendChild(details);
+            container.appendChild(details);
 
             summary.querySelector('.rename-topic-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1342,19 +1478,38 @@
             });
         });
 
-        memoryContainer.addEventListener('click', (e) => {
+        // Event listeners para checkboxes e botões
+        container.addEventListener('change', (e) => {
+            if (e.target.classList.contains('memory-checkbox')) {
+                const memoryId = e.target.getAttribute('data-id');
+                if (e.target.checked) {
+                    appState.selectedMemories.add(memoryId);
+                } else {
+                    appState.selectedMemories.delete(memoryId);
+                }
+                updateBulkActions();
+                renderMemories(); // Re-render para atualizar visual
+            }
+        });
+
+        container.addEventListener('click', (e) => {
             const target = e.target.closest('button');
             if (!target) return;
             
             if (target.classList.contains('delete-memory-btn')) {
                 const memoryId = target.getAttribute('data-id');
-                const isGlobal = target.getAttribute('data-is-global') === 'true';
-                deleteMemory(memoryId, isGlobal);
+                const isGlobalMem = target.getAttribute('data-is-global') === 'true';
+                deleteMemory(memoryId, isGlobalMem);
             } else if (target.classList.contains('move-to-global-btn')) {
                 const memoryId = target.getAttribute('data-id');
                 moveMemoryToGlobal(memoryId);
             }
         });
+    };
+
+    const updateBulkActions = () => {
+        const hasSelection = appState.selectedMemories.size > 0;
+        elements.bulkActions.classList.toggle('visible', hasSelection);
     };
 
     const setGeneratingState = (isGenerating) => {
@@ -1392,11 +1547,11 @@
         const aiMessageWrapper = appendMessage({ text: '<span class="blinking-cursor"></span>', sender: 'ai' });
         
         try {
+            // Combinar memórias globais e do chat para contexto
             const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
             const relevantMemories = selectRelevantMemories(allMemories, query);
             const memoryContext = formatMemoriesForContext(relevantMemories);
 
-            // CORREÇÃO: Usar a API correta /api/gemini
             const apiUrl = `/api/gemini`;
 
             const response = await fetch(apiUrl, {
@@ -1420,7 +1575,6 @@
                 throw new Error(errorJson?.error || `Erro da API: ${response.status}`);
             }
 
-            // Processar resposta JSON simples (sem streaming)
             const result = await response.json();
             
             aiMessageWrapper.remove();
@@ -1433,8 +1587,8 @@
                 }
             }
             
-            // Processar memória automática
-            if (result.newMemory) {
+            // Processar memória automática (APENAS para chat específico)
+            if (result.newMemory && appState.settings.autoMemory) {
                 chat.memories = chat.memories || [];
                 chat.memories.push(result.newMemory);
             }
@@ -1457,6 +1611,7 @@
         } finally {
             setGeneratingState(false);
             saveState();
+            renderMemories(); // Atualizar memórias se houver nova memória automática
         }
     };
     
@@ -1545,6 +1700,7 @@
                     chat.memories = (chat.memories || []).filter(mem => mem.id !== memoryId);
                 }
             }
+            appState.selectedMemories.delete(memoryId);
             saveState();
             renderMemories();
         });
@@ -1600,6 +1756,33 @@
         showNotification('Memória movida para global!');
     };
 
+    const moveSelectedMemoriesToGlobal = () => {
+        const chat = appState.chats[appState.activeChatId];
+        if (!chat || !chat.memories || appState.selectedMemories.size === 0) return;
+        
+        const selectedIds = Array.from(appState.selectedMemories);
+        const memoriesToMove = [];
+        
+        // Encontrar e remover memórias selecionadas
+        chat.memories = chat.memories.filter(mem => {
+            if (selectedIds.includes(mem.id)) {
+                memoriesToMove.push(mem);
+                return false;
+            }
+            return true;
+        });
+        
+        // Adicionar às memórias globais
+        appState.globalMemories.push(...memoriesToMove);
+        
+        // Limpar seleção
+        appState.selectedMemories.clear();
+        
+        saveState();
+        renderMemories();
+        showNotification(`${memoriesToMove.length} memória(s) movida(s) para global!`);
+    };
+
     const setProUI = (active) => {
         appState.settings.isProMode = active;
         elements.mainTitle.textContent = active ? "Phoenix Chat (PRO)" : "Phoenix Chat";
@@ -1613,16 +1796,38 @@
         saveState();
     };
 
-    const verifyPassword = () => {
+    const verifyPassword = async () => {
         const password = elements.proPasswordInput.value;
-        if (password) { 
-            appState.settings.proModeToken = password;
-            setProUI(true);
-            showNotification("Modo Pro ativado!");
-        } else {
-            setProUI(false);
-            showNotification("Senha incorreta.");
+        if (!password) {
+            showNotification("Por favor, digite uma senha.");
+            return;
         }
+
+        try {
+            const response = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'verifyPassword',
+                    proToken: password
+                })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                appState.settings.proModeToken = password;
+                setProUI(true);
+                showNotification(result.message || "Modo Pro ativado!");
+            } else {
+                setProUI(false);
+                showNotification(result.message || "Senha incorreta.");
+            }
+        } catch (error) {
+            setProUI(false);
+            showNotification("Erro ao verificar senha: " + error.message);
+        }
+        
         elements.passwordModal.classList.add('hidden');
         elements.proPasswordInput.value = '';
     };
@@ -1896,6 +2101,19 @@
     elements.canvasCopyBtn.addEventListener('click', copyCanvasContent);
     elements.canvasDownloadBtn.addEventListener('click', downloadCanvasContent);
     elements.canvasClearBtn.addEventListener('click', clearCanvasContent);
+
+    // Event listeners para ações em lote
+    elements.moveSelectedToGlobal.addEventListener('click', () => {
+        if (appState.selectedMemories.size > 0) {
+            showConfirmationModal(`Mover ${appState.selectedMemories.size} memória(s) para global?`, moveSelectedMemoriesToGlobal);
+        }
+    });
+
+    elements.clearSelection.addEventListener('click', () => {
+        appState.selectedMemories.clear();
+        updateBulkActions();
+        renderMemories();
+    });
 
     initCanvasResizer();
     loadState();
