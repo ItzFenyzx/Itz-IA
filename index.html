@@ -484,52 +484,46 @@
         .dark .drag-over {
             background-color: rgba(102, 126, 234, 0.2) !important;
         }
-        /* --- NOVOS ESTILOS PARA MODO BRANCO --- */
-body.light-mode-active .sua-classe-de-popup {
-    background-color: #ffffff; /* Fundo branco */
-    color: #000000; /* Texto preto */
-    border: 1px solid #cccccc; /* Borda clara */
-    /* Adicione outros estilos se necessário (padding, box-shadow, etc.) */
-}
 
-body.light-mode-active .sua-classe-de-popup .alguma-classe-interna { /* Se houver elementos internos que precisam de estilo diferente */
-    color: #333333; /* Exemplo: texto de um subtítulo */
-}
+        body.light-mode-active .sua-classe-de-popup {
+            background-color: #ffffff;
+            color: #000000;
+            border: 1px solid #cccccc;
+        }
 
+        body.light-mode-active .sua-classe-de-popup .alguma-classe-interna {
+            color: #333333;
+        }
 
-body.light-mode-active .sua-classe-de-botao {
-    background-color: #eeeeee; /* Cor de fundo clara para o botão */
-    color: #000000; /* Cor do texto preta */
-    border: 1px solid #aaaaaa; /* Borda */
-    /* Você pode ajustar as cores e bordas dos botões para serem diferentes mas harmoniosas no tema claro */
-}
+        body.light-mode-active .sua-classe-de-botao {
+            background-color: #eeeeee;
+            color: #000000;
+            border: 1px solid #aaaaaa;
+        }
 
-body.light-mode-active .sua-classe-de-botao:hover { /* Estilo ao passar o mouse */
-    background-color: #dddddd;
-    border-color: #999999;
-}
-/* Estilos para os botões de Cancelar no modo claro */
-/* Estes seletores visam os botões de cancelar dentro dos modais */
-body.light-mode-active #renameModal .bg-gray-600,
-body.light-mode-active #renameTopicModal .bg-gray-600,
-body.light-mode-active #memoryModal .bg-gray-600,
-body.light-mode-active #confirmModal .bg-gray-600,
-body.light-mode-active #passwordModal .bg-gray-600 {
-    background-color: var(--bg-secondary); /* Fundo claro do tema claro */
-    color: var(--text-primary); /* Texto primário do tema claro */
-    border: 1px solid var(--border-color); /* Borda clara do tema claro */
-}
+        body.light-mode-active .sua-classe-de-botao:hover {
+            background-color: #dddddd;
+            border-color: #999999;
+        }
 
-/* Opcional: Estilo hover para os botões de Cancelar no modo claro */
-body.light-mode-active #renameModal .bg-gray-600:hover,
-body.light-mode-active #renameTopicModal .bg-gray-600:hover,
-body.light-mode-active #memoryModal .bg-gray-600:hover,
-body.light-mode-active #confirmModal .bg-gray-600:hover,
-body.light-mode-active #passwordModal .bg-gray-600:hover {
-    background-color: var(--bg-tertiary); /* Cor de fundo um pouco mais escura no hover */
-    border-color: var(--text-secondary); /* Borda com cor de texto secundário no hover */
-}
+        body.light-mode-active #renameModal .bg-gray-600,
+        body.light-mode-active #renameTopicModal .bg-gray-600,
+        body.light-mode-active #memoryModal .bg-gray-600,
+        body.light-mode-active #confirmModal .bg-gray-600,
+        body.light-mode-active #passwordModal .bg-gray-600 {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
 
+        body.light-mode-active #renameModal .bg-gray-600:hover,
+        body.light-mode-active #renameTopicModal .bg-gray-600:hover,
+        body.light-mode-active #memoryModal .bg-gray-600:hover,
+        body.light-mode-active #confirmModal .bg-gray-600:hover,
+        body.light-mode-active #passwordModal .bg-gray-600:hover {
+            background-color: var(--bg-tertiary);
+            border-color: var(--text-secondary);
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen antialiased">
@@ -894,6 +888,8 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         memoryContainer: document.getElementById('memory-container'),
         canvasContent: document.getElementById('canvas-content'),
         chatListContainer: document.getElementById('chat-list-container'),
+        memoryPanel: document.getElementById('memory-panel'),
+        canvasPanel: document.getElementById('canvas-panel'),
     };
     
     const stopButton = document.createElement('button');
@@ -1016,7 +1012,6 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         applySettings();
     };
     
-    // CORREÇÃO: Lógica de visibilidade simplificada e robusta
     const updateEmptyState = () => {
         const hasChats = Object.keys(appState.chats).length > 0;
         
@@ -1075,7 +1070,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             chat.history = [];
             elements.chatMessages.innerHTML = `<div id="chat-placeholder" class="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
                     <svg class="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5-2.5-7S3 7 3 7a8 8 0 0110.657 10.657l3.414 3.414a2 2 0 01-2.828 2.828l-3.414-3.414zM4 4l16 16"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M17.657 18.657A8 8 0 716.343 7.343S7 9 9 10c0-2 .5-5-2.5-7S3 7 3 7a8 8 0 0110.657 10.657l3.414 3.414a2 2 0 01-2.828 2.828l-3.414-3.414zM4 4l16 16"/>
                     </svg>
                     <p>Crie um novo chat para começar a conversar.</p>
                 </div>`;
@@ -1363,7 +1358,7 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         appendMessage(userMessage);
         elements.userInput.value = '';
 
-        const imagePart = attachedFile ? { inlineData: { mimeType: attachedFile.type, data: attachedFile.data } } : null;
+        const imagePart = attachedFile ? { mimeType: attachedFile.type, data: attachedFile.data } : null;
         clearAttachment();
         
         const aiMessageWrapper = appendMessage({ text: '<span class="blinking-cursor"></span>', sender: 'ai' });
@@ -1372,44 +1367,29 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             const allMemories = [...appState.globalMemories, ...(chat.memories || [])];
             const relevantMemories = selectRelevantMemories(allMemories, query);
             const memoryContext = formatMemoriesForContext(relevantMemories);
-            const finalPrompt = buildDetailedMegaPrompt({ prompt: query, memoryContext, useDynamicPersona: appState.settings.dynamicPersona });
 
-            const parts = [{ text: finalPrompt }];
-            if (imagePart) {
-                parts.push(imagePart);
-            }
-            
-            const payload = {
-                contents: [{ parts }],
-                generationConfig: { temperature: 0.7, topP: 0.95 },
-                safetySettings: [
-                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" }
-                ]
-            };
-            
-            // CORREÇÃO: Usar uma API key de demonstração ou mostrar erro apropriado
-            const apiKey = "SUA_API_KEY_AQUI"; // Substitua pela sua API key real
-            const model = appState.settings.isProMode ? "gemini-pro" : "gemini-1.5-flash-latest";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
-
-            // Simular resposta para demonstração (remova isso quando tiver uma API key real)
-            if (apiKey === "SUA_API_KEY_AQUI") {
-                throw new Error("API Key não configurada. Configure sua API key do Google Gemini para usar o chat.");
-            }
+            // CORREÇÃO: Usar a API correta /api/gemini.js
+            const apiUrl = `/api/gemini`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({
+                    action: 'chat',
+                    prompt: query,
+                    isPro: appState.settings.isProMode,
+                    proToken: appState.settings.proModeToken,
+                    isAutoMemory: appState.settings.autoMemory,
+                    memories: allMemories,
+                    image: imagePart,
+                    useDynamicPersona: appState.settings.dynamicPersona
+                }),
                 signal: abortController.signal
             });
 
             if (!response.ok) {
                 const errorJson = await response.json();
-                throw new Error(errorJson?.error?.message || `Erro da API: ${response.status}`);
+                throw new Error(errorJson?.error || `Erro da API: ${response.status}`);
             }
 
             const reader = response.body.getReader();
@@ -1430,38 +1410,41 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
                         try {
                             const jsonStr = line.trim().substring(5);
                             const data = JSON.parse(jsonStr);
-                            const textChunk = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                            fullResponseText += textChunk;
-                            aiMessageWrapper.querySelector('.markdown-content').innerHTML = DOMPurify.sanitize(marked.parse(fullResponseText + '<span class="blinking-cursor"></span>'));
-                            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                            
+                            if (data.type === 'chunk') {
+                                fullResponseText += data.text;
+                                aiMessageWrapper.querySelector('.markdown-content').innerHTML = DOMPurify.sanitize(marked.parse(fullResponseText + '<span class="blinking-cursor"></span>'));
+                                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                            } else if (data.type === 'complete') {
+                                fullResponseText = data.aiResponse;
+                                
+                                // Processar Canvas
+                                if (data.canvasContent) {
+                                    renderCanvas(data.canvasContent);
+                                    if (elements.rightPanelContainer.classList.contains('right-panel-collapsed')) {
+                                        switchView('canvas');
+                                    }
+                                }
+                                
+                                // Processar memória automática
+                                if (data.newMemory) {
+                                    chat.memories = chat.memories || [];
+                                    chat.memories.push(data.newMemory);
+                                }
+                                
+                                break;
+                            } else if (data.type === 'error') {
+                                throw new Error(data.error);
+                            }
                         } catch (e) { /* Ignorar erros de parse */ }
                     }
                 }
             }
             
-            let finalAiText = fullResponseText;
-            let canvasContent = chat.canvasContent || '';
-            const canvasBeginTag = "[CANVAS_BEGINS]";
-            const canvasEndTag = "[CANVAS_ENDS]";
-            const beginIndex = fullResponseText.indexOf(canvasBeginTag);
-
-            if (beginIndex !== -1) {
-                const endIndex = fullResponseText.lastIndexOf(canvasEndTag);
-                if (endIndex > beginIndex) {
-                    finalAiText = fullResponseText.substring(0, beginIndex).trim();
-                    canvasContent = fullResponseText.substring(beginIndex + canvasBeginTag.length, endIndex).trim();
-                    renderCanvas(canvasContent);
-                    if (elements.rightPanelContainer.classList.contains('right-panel-collapsed')) {
-                        switchView('canvas');
-                    }
-                }
-            }
-            
             aiMessageWrapper.remove();
-            const finalMessage = { text: finalAiText, sender: 'ai', isPro: appState.settings.isProMode, usedContext: relevantMemories.map(m => m.topics).flat() };
+            const finalMessage = { text: fullResponseText, sender: 'ai', isPro: appState.settings.isProMode, usedContext: relevantMemories.map(m => m.topics).flat() };
             appendMessage(finalMessage);
             chat.history.push(finalMessage);
-            chat.canvasContent = canvasContent;
 
         } catch (error) {
              aiMessageWrapper.remove();
@@ -1918,3 +1901,4 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
     </script>
 </body>
 </html>
+
