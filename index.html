@@ -1390,9 +1390,15 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
                 ]
             };
             
-            const apiKey = ""; // Será fornecido pelo ambiente
+            // CORREÇÃO: Usar uma API key de demonstração ou mostrar erro apropriado
+            const apiKey = "SUA_API_KEY_AQUI"; // Substitua pela sua API key real
             const model = appState.settings.isProMode ? "gemini-pro" : "gemini-1.5-flash-latest";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
+
+            // Simular resposta para demonstração (remova isso quando tiver uma API key real)
+            if (apiKey === "SUA_API_KEY_AQUI") {
+                throw new Error("API Key não configurada. Configure sua API key do Google Gemini para usar o chat.");
+            }
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -1594,6 +1600,21 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
         renderMemories();
     };
 
+    const moveMemoryToGlobal = (memoryId) => {
+        const chat = appState.chats[appState.activeChatId];
+        if (!chat || !chat.memories) return;
+        
+        const memoryIndex = chat.memories.findIndex(mem => mem.id === memoryId);
+        if (memoryIndex === -1) return;
+        
+        const memory = chat.memories.splice(memoryIndex, 1)[0];
+        appState.globalMemories.push(memory);
+        
+        saveState();
+        renderMemories();
+        showNotification('Memória movida para global!');
+    };
+
     const setProUI = (active) => {
         appState.settings.isProMode = active;
         elements.mainTitle.textContent = active ? "Phoenix Chat (PRO)" : "Phoenix Chat";
@@ -1679,6 +1700,53 @@ body.light-mode-active #passwordModal .bg-gray-600:hover {
             renderCanvas('');
         });
     };
+
+    const clearAttachment = () => {
+        attachedFile = null;
+        elements.attachmentPreview.classList.add('hidden');
+        elements.attachmentPreview.innerHTML = '';
+        elements.fileInput.value = '';
+    };
+
+    const handleFileAttachment = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const base64Data = e.target.result.split(',')[1];
+            attachedFile = {
+                type: file.type,
+                data: base64Data,
+                name: file.name
+            };
+            
+            elements.attachmentPreview.innerHTML = `
+                <div class="flex items-center space-x-2 p-2 bg-[var(--bg-tertiary)] rounded-lg">
+                    <img src="${e.target.result}" alt="Preview" class="w-12 h-12 object-cover rounded">
+                    <span class="text-sm text-[var(--text-primary)]">${file.name}</span>
+                    <button onclick="clearAttachment()" class="text-red-500 hover:text-red-700 ml-auto">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            elements.attachmentPreview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleFileDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        elements.userInput.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && files[0].type.startsWith('image/')) {
+            handleFileAttachment(files[0]);
+        }
+    };
+
+    // Tornar clearAttachment global para o onclick
+    window.clearAttachment = clearAttachment;
 
     // --- EVENT LISTENERS ---
     elements.createFirstChatBtn.addEventListener('click', createNewChat);
