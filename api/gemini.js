@@ -222,7 +222,7 @@ export default async function handler(req, res) {
 
         // Selecionar modelo
         const model = isPro ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
-        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
+        const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
         // Processar memórias com gestão inteligente de tokens
         let memoryContext = "";
@@ -289,12 +289,7 @@ export default async function handler(req, res) {
             });
         }
 
-        // Configurar headers para streaming
-        res.setHeader("Content-Type", "text/plain; charset=utf-8");
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
-
-        // Fazer chamada de streaming à API do Gemini
+        // Fazer chamada à API do Gemini (sem streaming para simplificar)
         const response = await fetch(baseUrl, {
             method: "POST",
             headers: {
@@ -324,45 +319,18 @@ export default async function handler(req, res) {
             });
         }
 
+        const result = await response.json();
         let fullResponse = "";
+        
+        if (result.candidates && result.candidates[0] && result.candidates[0].content) {
+            fullResponse = result.candidates[0].content.parts[0].text;
+        } else {
+            throw new Error("Resposta inválida da API Gemini");
+        }
+
         let canvasContent = null;
         const canvasBeginTag = "[CANVAS_BEGINS]";
         const canvasEndTag = "[CANVAS_ENDS]";
-
-        // Processar stream de resposta
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                
-                if (done) break;
-                
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split("\n");
-                
-                for (const line of lines) {
-                    if (line.startsWith("data: ")) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-                            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-                                const text = data.candidates[0].content.parts[0].text;
-                                fullResponse += text;
-                                
-                                // Enviar chunk para o frontend
-                                res.write(`data: ${JSON.stringify({ type: "chunk", text })}\n\n`);
-                            }
-                        } catch (parseError) {
-                            // Ignorar linhas que não são JSON válido
-                        }
-                    }
-                }
-            }
-        } catch (streamError) {
-            console.error("Erro no streaming:", streamError);
-            res.write(`data: ${JSON.stringify({ type: "error", error: "Erro no streaming" })}\n\n`);
-        }
 
         // Processar resposta final para separar chat e canvas
         let aiResponse = fullResponse;
@@ -428,21 +396,16 @@ Retorne APENAS um JSON no formato:
             }
         }
 
-        // Enviar dados finais
-        res.write(`data: ${JSON.stringify({
-            type: "complete",
+        // Retornar resposta completa
+        return res.status(200).json({
             aiResponse,
             canvasContent,
             newMemory,
             usedContext: usedContextTopics
-        })}\n\n`);
-        
-        res.end();
+        });
 
     } catch (error) {
         console.error("Erro no handler:", error);
-        res.write(`data: ${JSON.stringify({ type: "error", error: "Erro interno do servidor: " + error.message })}\n\n`);
-        res.end();
+        return res.status(500).json({ error: "Erro interno do servidor: " + error.message });
     }
 }
-
