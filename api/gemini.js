@@ -139,10 +139,10 @@ Você é um assistente de IA avançado. Siga rigorosamente todas as regras abaix
 
     if (useDynamicPersona) {
         megaPrompt += `
-   - **Modo Especialista DESATIVADO:** Primeiro, analise a pergunta do utilizador para definir a persona de especialista mais adequada para responder (ex: "Historiador Militar", "Físico Teórico"). Depois, adote essa persona para formular a sua resposta SEM se apresentar formalmente.`;
+   - **Modo Especialista ATIVO:** Primeiro, analise a pergunta do utilizador para definir a persona de especialista mais adequada para responder (ex: "Historiador Militar", "Físico Teórico"). Depois, adote essa persona para formular a sua resposta SEM se apresentar formalmente.`;
     } else {
         megaPrompt += `
-   - **Modo Especialista ATIVO:** Aja como um doutor em todos os aspetos do conhecimento, um polímata com acesso a toda a informação humana. Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
+   - **Modo Especialista DESATIVADO:** Aja como um doutor em todos os aspetos do conhecimento, um polímata com acesso a toda a informação humana. Forneça respostas detalhadas, estruturadas e profundas, demonstrando maestria no assunto.`;
     }
 
     if (memoryContext) {
@@ -195,11 +195,12 @@ export default async function handler(req, res) {
 
         // Verificar senha do Modo Pro se necessário
         if (action === "verifyPassword") {
-            const correctPassword = process.env.PRO_MODE_PASSWORD;
-            if (!correctPassword) {
-                return res.status(500).json({ error: "Senha do Modo Pro não configurada no servidor" });
-            }
-            return res.status(200).json({ success: proToken === correctPassword });
+            const correctPassword = process.env.PRO_MODE_PASSWORD || "phoenix2024";
+            const isValid = proToken === correctPassword;
+            return res.status(200).json({ 
+                success: isValid,
+                message: isValid ? "Modo Pro ativado com sucesso!" : "Senha incorreta. Tente novamente."
+            });
         }
 
         if (action !== "chat") {
@@ -209,14 +210,14 @@ export default async function handler(req, res) {
         // Verificar API Key
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return res.status(500).json({ error: "API Key do Gemini não configurada" });
+            return res.status(500).json({ error: "API Key do Gemini não configurada no servidor" });
         }
 
         // Verificar senha do Modo Pro se estiver ativo
         if (isPro) {
-            const correctPassword = process.env.PRO_MODE_PASSWORD;
+            const correctPassword = process.env.PRO_MODE_PASSWORD || "phoenix2024";
             if (!correctPassword || proToken !== correctPassword) {
-                return res.status(401).json({ error: "Senha do Modo Pro incorreta" });
+                return res.status(401).json({ error: "Senha do Modo Pro incorreta ou não configurada" });
             }
         }
 
@@ -289,14 +290,38 @@ export default async function handler(req, res) {
             });
         }
 
-        // Fazer chamada à API do Gemini (sem streaming para simplificar)
-        const response = await fetch(baseUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(geminiPayload)
-        });
+        // Fazer chamada à API do Gemini com retry em caso de rate limit
+        let response;
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+            try {
+                response = await fetch(baseUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(geminiPayload)
+                });
+                
+                if (response.status === 429) {
+                    // Rate limit - aguardar antes de tentar novamente
+                    const waitTime = Math.pow(2, retryCount) * 1000; // Backoff exponencial
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    retryCount++;
+                    continue;
+                }
+                
+                break;
+            } catch (error) {
+                retryCount++;
+                if (retryCount >= maxRetries) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
 
         if (!response.ok) {
             const errorData = await response.text();
@@ -345,9 +370,9 @@ export default async function handler(req, res) {
             ).trim();
         }
 
-        // Gerar memória automática se ativada
+        // Gerar memória automática se ativada (APENAS para chat específico)
         let newMemory = null;
-        if (isAutoMemory && aiResponse.trim()) {
+        if (isAutoMemory && aiResponse.trim() && prompt.trim()) {
             try {
                 const memoryPrompt = `Analise esta conversa e crie um resumo estruturado em JSON:
 
@@ -384,7 +409,8 @@ Retorne APENAS um JSON no formato:
                                 text: memoryData.text || "Conversa resumida automaticamente",
                                 topics: Array.isArray(memoryData.topics) ? memoryData.topics.slice(0, 3) : ["conversa"],
                                 tokenCount: estimateTokens(memoryData.text || "Conversa resumida automaticamente"),
-                                lastAccessed: Date.now()
+                                lastAccessed: Date.now(),
+                                isAutoGenerated: true
                             };
                         } catch (parseError) {
                             console.error("Erro ao parsear JSON da memória:", parseError);
